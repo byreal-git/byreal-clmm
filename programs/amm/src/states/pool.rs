@@ -1,12 +1,17 @@
 use crate::error::ErrorCode;
 use crate::libraries::{
     big_num::{U1024, U128, U256},
-    check_current_tick_array_is_initialized, fixed_point_64,
+    check_current_tick_array_is_initialized,
+    dynamic_fee_math::{
+        calculate_dynamic_fee_rate as calculate_dynamic_fee_rate_math, normalize_trade_size, price_from_sqrt_price_x64,
+        quote_amount_from_base, DynamicFeeInputs, DynamicFeeResult,
+    },
+    fixed_point_64,
     full_math::MulDiv,
     tick_array_bit_map, tick_math,
 };
 use crate::states::*;
-use crate::util::get_recent_epoch;
+use crate::util::{get_recent_epoch, pyth};
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program_option::COption;
 use anchor_spl::token_interface::Mint;
@@ -115,7 +120,12 @@ pub struct PoolState {
     /// bit4, 1: disable swap, 0: normal
     pub status: u8,
     /// Leave blank for future use
-    pub padding: [u8; 7],
+    pub padding: [u8; 3],
+
+    /// If this value is non-zero, it overrides the trade_fee_rate from amm_config and is used as the
+    /// effective trade fee rate.
+    /// The trade fee, denominated in hundredths of a bip (10^-6)
+    pub trade_fee_rate: u32,
 
     pub reward_infos: [RewardInfo; REWARD_NUM],
 
@@ -137,24 +147,59 @@ pub struct PoolState {
     // account recent update epoch
     pub recent_epoch: u64,
 
-    /// decay fee flag
+    /// --- decay fee flag
     /// bit0, 1: use decay fee, 0: not use decay fee
     /// bit1, 1: use decay fee on sell for mint0, 0: not use decay fee on sell for mint0
     /// bit2, 1: use decay fee on sell for mint1, 0: not use decay fee on sell for mint1
+    /// --- swap-dynamic-fee-flag
+    /// bit3, 1: token1 as quote token; token0 as quote token
+    /// bit4, 1: enable swap-dynamic-fee; 0: disable swap-dynamic-fee
     pub decay_fee_flag: u8,
+
+    //-------------------- decay-fee parameters
     /// The initial decay fee rate for the pool, in percentage.(1=1%)
     pub decay_fee_init_fee_rate: u8,
     /// decrease rate for the decay fee, in percentage.(1=1%)
     pub decay_fee_decrease_rate: u8,
     /// The interval for decreasing the decay fee, in seconds.
     pub decay_fee_decrease_interval: u8,
+    //----------------------------------------------
+
+    //-------------------- swap-dynamic-fee parameters
+    /// arbitrage_fee: a manually configured tolerance; if the price gap is below this value no
+    /// arbitrageFee is charged. Unit is 10^-6 (percent-per-million).
+    pub arbitrage_fee_buffer_ppm: u16,
+    /// trade_slippage_fee: the `b` coefficient in the formula. Unit is 1/1000.
+    pub trade_slippage_fee_base: u8,
+    /// Normalized swap-size value (computed in quote-token units). Unit is 100.
+    pub trade_slippage_fee_trade_size_threshold: u8,
+    /// The `b` coefficient in the imbalance-fee formula. Unit is 1/10.
+    pub imbalance_fee_base: u8,
+    /// The `x` coefficient in the imbalance-fee formula. Unit is 1/100.
+    pub imbalance_fee_x: u8,
+    //----------------------------------------------
+
     // Unused bytes for future upgrades.
-    pub padding1_1: [u8; 4],
-    pub padding1: [u64; 23],
+    pub padding1_1: [u8; 6],
+
+    //-------------------- swap-dynamic-fee parameters
+    /// Pyth feed id for base token.
+    pub token0_pyth_feed_id: [u8; 32],
+    /// Pyth feed id for quote token.
+    pub token1_pyth_feed_id: [u8; 32],
+    //----------------------------------------------
+    pub padding1: [u64; 14],
     pub padding2: [u64; 32],
 }
 
+/// Compile-time assertion that the layout stays consistent.
+const _: () = {
+    assert!(PoolState::LEN == 1544, "PoolState::LEN must be 1544");
+    const POOL_SIZE: usize = core::mem::size_of::<PoolState>();
+    assert!(POOL_SIZE == PoolState::LEN - 8, "PoolState size must be PoolState::LEN");
+};
 impl PoolState {
+    /// LEN is fixed at 1544; future code changes must not alter this value.
     pub const LEN: usize = 8
         + 1
         + 32 * 7
@@ -232,7 +277,8 @@ impl PoolState {
         self.swap_in_amount_token_1 = 0;
         self.swap_out_amount_token_0 = 0;
         self.status = 0;
-        self.padding = [0; 7];
+        self.padding = [0; 3];
+        self.trade_fee_rate = 0;
         self.tick_array_bitmap = [0; 16];
         self.total_fees_token_0 = 0;
         self.total_fees_claimed_token_0 = 0;
@@ -243,8 +289,18 @@ impl PoolState {
         self.open_time = open_time;
         self.recent_epoch = get_recent_epoch()?;
         self.decay_fee_flag = 0; // default, don't use dynamic fee
-        self.padding1_1 = [0; 4];
-        self.padding1 = [0; 23];
+        self.decay_fee_init_fee_rate = 0;
+        self.decay_fee_decrease_rate = 0;
+        self.decay_fee_decrease_interval = 0;
+        self.arbitrage_fee_buffer_ppm = 0;
+        self.trade_slippage_fee_base = 0;
+        self.trade_slippage_fee_trade_size_threshold = 0;
+        self.imbalance_fee_base = 0;
+        self.imbalance_fee_x = 0;
+        self.padding1_1 = [0; 6];
+        self.token0_pyth_feed_id = [0; 32];
+        self.token1_pyth_feed_id = [0; 32];
+        self.padding1 = [0; 14];
         self.padding2 = [0; 32];
         self.observation_key = observation_state_key;
 
@@ -302,8 +358,249 @@ impl PoolState {
         self.decay_fee_flag & (1 << 2) != 0
     }
 
+    /// Calculate decay trade fee rate. Return 0 if decay fee is disabled.
+    /// Computes decay_fee_rate according to the swap direction.
+    pub fn get_decay_trade_fee_rate_with_swap_side(&self, zero_for_one: bool, block_timestamp: u64) -> u32 {
+        if !self.is_decay_fee_enabled() {
+            return 0;
+        }
+
+        let decay_trade_fee_rate = if zero_for_one && self.is_decay_fee_on_sell_mint0() {
+            self.calculate_decay_fee_rate_all_side(block_timestamp)
+        } else if !zero_for_one && self.is_decay_fee_on_sell_mint1() {
+            self.calculate_decay_fee_rate_all_side(block_timestamp)
+        } else {
+            0
+        };
+
+        #[cfg(feature = "enable-log")]
+        if decay_trade_fee_rate > 0 {
+            msg!(
+                "enable decay trade fee, zero_for_one:{}, decay_trade_fee_rate:{}",
+                zero_for_one,
+                decay_trade_fee_rate
+            );
+        }
+
+        decay_trade_fee_rate
+    }
+
+    /// Disable decay fee if it is not needed.
+    pub fn disable_decay_fee_if_needed(
+        &mut self,
+        zero_for_one: bool,
+        decay_trade_fee_rate: u32,
+        real_trade_fee_rate: u32,
+    ) -> Result<()> {
+        if !self.is_decay_fee_enabled() {
+            return Ok(());
+        }
+        let decay_applies =
+            (zero_for_one && self.is_decay_fee_on_sell_mint0()) || (!zero_for_one && self.is_decay_fee_on_sell_mint1());
+        if !decay_applies {
+            return Ok(());
+        }
+        if decay_trade_fee_rate <= real_trade_fee_rate {
+            self.disable_decay_fee()?;
+        }
+        Ok(())
+    }
+
+    /// Returns the pool's base fee rate (excluding decay fee).
+    /// If `pool.trade_fee_rate != 0`, the pool's rate is used; otherwise the amm_config rate is used.
+    pub fn get_effective_trade_fee_rate(&self, amm_config: &AmmConfig) -> u32 {
+        if self.trade_fee_rate != 0 {
+            self.trade_fee_rate
+        } else {
+            amm_config.trade_fee_rate
+        }
+    }
+
+    /// Calculate base trade fee rate based on pool/amm config.
+    /// Computes the base-fee only; the dynamic-fee component is excluded.
+    pub fn calculate_base_trade_fee_rate(
+        &self,
+        amm_config: &AmmConfig,
+        zero_for_one: bool,
+        block_timestamp: u64,
+    ) -> Result<u32> {
+        let decay_trade_fee_rate = self.get_decay_trade_fee_rate_with_swap_side(zero_for_one, block_timestamp);
+        let mut real_trade_fee_rate = self.get_effective_trade_fee_rate(amm_config);
+        if decay_trade_fee_rate > real_trade_fee_rate {
+            real_trade_fee_rate = decay_trade_fee_rate;
+        }
+        Ok(real_trade_fee_rate)
+    }
+
+    // 1 hour. We are not very sensitive to Pyth price updates, but we still reject anything too stale.
+    const MAX_PYTH_AGE_SECONDS: u64 = 3600;
+
+    /// Calculate dynamic fee rate based on pool/amm config and swap context.
+    /// Returns detailed fee breakdown, including total_fee_rate.
+    pub fn calculate_dynamic_fee_rate<'a>(
+        &self,
+        input_vault_key: Pubkey,
+        input_vault_mint: Pubkey,
+        input_vault_amount: u64,
+        output_vault_amount: u64,
+        amount: u64,
+        is_base_input: bool,
+        fee_base: u32,
+        token0_pyth_oracle: &'a AccountInfo<'a>,
+        token1_pyth_oracle: &'a AccountInfo<'a>,
+    ) -> Result<DynamicFeeResult> {
+        let token0_price = pyth::load_pyth_price(
+            token0_pyth_oracle,
+            &self.token0_pyth_feed_id,
+            Self::MAX_PYTH_AGE_SECONDS,
+        )?;
+        let token1_price = pyth::load_pyth_price(
+            token1_pyth_oracle,
+            &self.token1_pyth_feed_id,
+            Self::MAX_PYTH_AGE_SECONDS,
+        )?;
+
+        let p_index =
+            pyth::calculate_price_index(&token0_price, &token1_price, self.mint_decimals_0, self.mint_decimals_1)?;
+        let p_0 = price_from_sqrt_price_x64(self.sqrt_price_x64)?;
+
+        let zero_for_one = input_vault_mint == self.token_mint_0;
+        let token1_as_quote = self.is_token1_quote();
+        let input_is_quote = if token1_as_quote { !zero_for_one } else { zero_for_one };
+        let is_buying_base = input_is_quote;
+
+        let quote_amount = if is_base_input {
+            if input_is_quote {
+                amount as u128
+            } else {
+                quote_amount_from_base(amount as u128, p_0, token1_as_quote)?
+            }
+        } else {
+            let output_is_quote = !input_is_quote;
+            if output_is_quote {
+                amount as u128
+            } else {
+                quote_amount_from_base(amount as u128, p_0, token1_as_quote)?
+            }
+        };
+
+        let quote_decimals = if token1_as_quote {
+            self.mint_decimals_1
+        } else {
+            self.mint_decimals_0
+        };
+        let trade_size = normalize_trade_size(quote_amount, quote_decimals)?;
+
+        let (token0_vault_amount, token1_vault_amount) = if input_vault_key == self.token_vault_0 {
+            (input_vault_amount as u128, output_vault_amount as u128)
+        } else {
+            (output_vault_amount as u128, input_vault_amount as u128)
+        };
+
+        let (quote_value_of_base, quote_balance) = if token1_as_quote {
+            let base_amount = token0_vault_amount;
+            let quote_balance = token1_vault_amount;
+            (quote_amount_from_base(base_amount, p_0, true)?, quote_balance)
+        } else {
+            let base_amount = token1_vault_amount;
+            let quote_balance = token0_vault_amount;
+            (quote_amount_from_base(base_amount, p_0, false)?, quote_balance)
+        };
+
+        calculate_dynamic_fee_rate_math(&DynamicFeeInputs {
+            p_0,
+            p_index,
+            trade_size,
+            quote_value_of_base,
+            quote_balance,
+            is_buying_base,
+            fee_base,
+            arbitrage_fee_buffer_ppm: self.arbitrage_fee_buffer_ppm,
+            trade_slippage_fee_base: self.trade_slippage_fee_base,
+            trade_slippage_fee_trade_size_threshold: self.trade_slippage_fee_trade_size_threshold,
+            imbalance_fee_base: self.imbalance_fee_base,
+            imbalance_fee_x: self.imbalance_fee_x,
+        })
+    }
+
+    /// Returns whether swap-dynamic-fee is enabled.
+    pub fn is_swap_dynamic_fee_enabled(&self) -> bool {
+        self.decay_fee_flag & 0b10000 != 0
+    }
+
+    /// Returns the quote-token flag (true = token1 is quote, false = token0 is quote).
+    pub fn is_token1_quote(&self) -> bool {
+        self.decay_fee_flag & 0b1000 != 0
+    }
+
+    /// Set the quote-token flag.
+    pub fn set_quote_token_flag(&mut self, token1_as_quote: bool) {
+        if token1_as_quote {
+            self.decay_fee_flag |= 0b1000;
+        } else {
+            self.decay_fee_flag &= !0b1000;
+        }
+    }
+
+    /// Enable or disable swap-dynamic-fee.
+    pub fn set_swap_dynamic_fee_enabled(&mut self, enabled: bool) {
+        if enabled {
+            self.decay_fee_flag |= 0b10000;
+        } else {
+            self.decay_fee_flag &= !0b10000;
+        }
+    }
+
+    /// Set the swap-dynamic-fee parameters.
+    pub fn set_swap_dynamic_fee_params(
+        &mut self,
+        arbitrage_fee_buffer_ppm: Option<u16>,
+        trade_slippage_fee_base: Option<u8>,
+        trade_slippage_fee_trade_size_threshold: Option<u8>,
+        imbalance_fee_base: Option<u8>,
+        imbalance_fee_x: Option<u8>,
+        token0_pyth_feed_id: Option<[u8; 32]>,
+        token1_pyth_feed_id: Option<[u8; 32]>,
+    ) -> Result<()> {
+        if let Some(value) = arbitrage_fee_buffer_ppm {
+            require!(
+                value as u32 <= FEE_RATE_DENOMINATOR_VALUE,
+                ErrorCode::InvalidSwapDynamicFeeParams
+            );
+            self.arbitrage_fee_buffer_ppm = value;
+        }
+        if let Some(value) = trade_slippage_fee_base {
+            self.trade_slippage_fee_base = value;
+        }
+        if let Some(value) = trade_slippage_fee_trade_size_threshold {
+            self.trade_slippage_fee_trade_size_threshold = value;
+        }
+        if let Some(value) = imbalance_fee_base {
+            self.imbalance_fee_base = value;
+        }
+        if let Some(value) = imbalance_fee_x {
+            require!(value <= 100, ErrorCode::InvalidSwapDynamicFeeParams);
+            self.imbalance_fee_x = value;
+        }
+        if let Some(value) = token0_pyth_feed_id {
+            self.token0_pyth_feed_id = value;
+        }
+        if let Some(value) = token1_pyth_feed_id {
+            self.token1_pyth_feed_id = value;
+        }
+
+        if self.is_swap_dynamic_fee_enabled() {
+            require!(
+                self.token0_pyth_feed_id != [0u8; 32] && self.token1_pyth_feed_id != [0u8; 32],
+                ErrorCode::InvalidSwapDynamicFeeParams
+            );
+        }
+        Ok(())
+    }
+
     /// Get the decay fee rate based on the current time, in hunderedths of a bip (10^-6).
-    pub fn get_decay_fee_rate(&self, current_timestamp: u64) -> u32 {
+    /// Computes decay_fee_rate without regard to swap direction.
+    pub fn calculate_decay_fee_rate_all_side(&self, current_timestamp: u64) -> u32 {
         if !self.is_decay_fee_enabled() {
             return 0u32;
         }
@@ -1570,7 +1867,8 @@ pub mod pool_test {
             let swap_in_amount_token_1: u128 = 0x11223344556677008899aabbccddeeff;
             let swap_out_amount_token_0: u128 = 0x11223344556677880099aabbccddeeff;
             let status: u8 = 0x1b;
-            let padding: [u8; 7] = [0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18];
+            let padding: [u8; 3] = [0x12, 0x13, 0x14];
+            let trade_fee_rate: u32 = 0x12345678;
             // RewardInfo
             let reward_state: u8 = 0x1c;
             let open_time: u64 = 0x123456789abc0def;
@@ -1638,12 +1936,19 @@ pub mod pool_test {
             let decay_fee_init_fee_rate: u8 = 0x0d;
             let decay_fee_decrease_rate: u8 = 0x0e;
             let decay_fee_decrease_interval: u8 = 0x0f;
-            let padding1_1: [u8; 4] = [0; 4];
+            let arbitrage_fee_buffer_ppm: u16 = 0x1f20;
+            let trade_slippage_fee_base: u8 = 0x21;
+            let trade_slippage_fee_trade_size_threshold: u8 = 0x22;
+            let imbalance_fee_base: u8 = 0x23;
+            let imbalance_fee_x: u8 = 0x24;
+            let padding1_1: [u8; 6] = [0; 6];
+            let token0_pyth_feed_id: [u8; 32] = [0x2a; 32];
+            let token1_pyth_feed_id: [u8; 32] = [0x2b; 32];
 
-            let mut padding1: [u64; 23] = [0u64; 23];
-            let mut padding1_data = [0u8; 8 * 23];
+            let mut padding1: [u64; 14] = [0u64; 14];
+            let mut padding1_data = [0u8; 8 * 14];
             let mut offset = 0;
-            for i in 0..23 {
+            for i in 0..14 {
                 padding1[i] = u64::MAX - i as u64;
                 padding1_data[offset..offset + 8].copy_from_slice(&padding1[i].to_le_bytes());
                 offset += 8;
@@ -1711,8 +2016,10 @@ pub mod pool_test {
             offset += 16;
             pool_data[offset..offset + 1].copy_from_slice(&status.to_le_bytes());
             offset += 1;
-            pool_data[offset..offset + 7].copy_from_slice(&padding);
-            offset += 7;
+            pool_data[offset..offset + 3].copy_from_slice(&padding);
+            offset += 3;
+            pool_data[offset..offset + 4].copy_from_slice(&trade_fee_rate.to_le_bytes());
+            offset += 4;
             pool_data[offset..offset + RewardInfo::LEN * REWARD_NUM].copy_from_slice(&reward_info_datas);
             offset += RewardInfo::LEN * REWARD_NUM;
             pool_data[offset..offset + 8 * 16].copy_from_slice(&tick_array_bitmap_data);
@@ -1742,11 +2049,26 @@ pub mod pool_test {
             offset += 1;
             pool_data[offset..offset + 1].copy_from_slice(&decay_fee_decrease_interval.to_le_bytes());
             offset += 1;
-            pool_data[offset..offset + 4].copy_from_slice(&padding1_1);
-            offset += 4;
+            pool_data[offset..offset + 2].copy_from_slice(&arbitrage_fee_buffer_ppm.to_le_bytes());
+            offset += 2;
+            pool_data[offset..offset + 1].copy_from_slice(&trade_slippage_fee_base.to_le_bytes());
+            offset += 1;
+            pool_data[offset..offset + 1].copy_from_slice(&trade_slippage_fee_trade_size_threshold.to_le_bytes());
+            offset += 1;
+            pool_data[offset..offset + 1].copy_from_slice(&imbalance_fee_base.to_le_bytes());
+            offset += 1;
+            pool_data[offset..offset + 1].copy_from_slice(&imbalance_fee_x.to_le_bytes());
+            offset += 1;
+            pool_data[offset..offset + 6].copy_from_slice(&padding1_1);
+            offset += 6;
 
-            pool_data[offset..offset + 8 * 23].copy_from_slice(&padding1_data);
-            offset += 8 * 23;
+            pool_data[offset..offset + 32].copy_from_slice(&token0_pyth_feed_id);
+            offset += 32;
+            pool_data[offset..offset + 32].copy_from_slice(&token1_pyth_feed_id);
+            offset += 32;
+
+            pool_data[offset..offset + 8 * 14].copy_from_slice(&padding1_data);
+            offset += 8 * 14;
             pool_data[offset..offset + 8 * 32].copy_from_slice(&padding2_data);
             offset += 8 * 32;
 
@@ -1810,6 +2132,8 @@ pub mod pool_test {
             assert_eq!(unpack_status, status);
             let unpack_padding = unpack_data.padding;
             assert_eq!(unpack_padding, padding);
+            let unpack_trade_fee_rate = unpack_data.trade_fee_rate;
+            assert_eq!(unpack_trade_fee_rate, trade_fee_rate);
 
             for reward in unpack_data.reward_infos {
                 let unpack_reward_state = reward.reward_state;
@@ -1852,6 +2176,31 @@ pub mod pool_test {
             assert_eq!(unpack_open_time, pool_open_time);
             let unpack_recent_epoch = unpack_data.recent_epoch;
             assert_eq!(unpack_recent_epoch, recent_epoch);
+            let unpack_decay_fee_flag = unpack_data.decay_fee_flag;
+            assert_eq!(unpack_decay_fee_flag, decay_fee_flag);
+            let unpack_decay_fee_init_fee_rate = unpack_data.decay_fee_init_fee_rate;
+            assert_eq!(unpack_decay_fee_init_fee_rate, decay_fee_init_fee_rate);
+            let unpack_decay_fee_decrease_rate = unpack_data.decay_fee_decrease_rate;
+            assert_eq!(unpack_decay_fee_decrease_rate, decay_fee_decrease_rate);
+            let unpack_decay_fee_decrease_interval = unpack_data.decay_fee_decrease_interval;
+            assert_eq!(unpack_decay_fee_decrease_interval, decay_fee_decrease_interval);
+            let unpack_arbitrage_fee_buffer_ppm = unpack_data.arbitrage_fee_buffer_ppm;
+            assert_eq!(unpack_arbitrage_fee_buffer_ppm, arbitrage_fee_buffer_ppm);
+            let unpack_trade_slippage_fee_base = unpack_data.trade_slippage_fee_base;
+            assert_eq!(unpack_trade_slippage_fee_base, trade_slippage_fee_base);
+            let unpack_trade_slippage_fee_trade_size_threshold = unpack_data.trade_slippage_fee_trade_size_threshold;
+            assert_eq!(
+                unpack_trade_slippage_fee_trade_size_threshold,
+                trade_slippage_fee_trade_size_threshold
+            );
+            let unpack_imbalance_fee_base = unpack_data.imbalance_fee_base;
+            assert_eq!(unpack_imbalance_fee_base, imbalance_fee_base);
+            let unpack_imbalance_fee_x = unpack_data.imbalance_fee_x;
+            assert_eq!(unpack_imbalance_fee_x, imbalance_fee_x);
+            let unpack_token0_pyth_feed_id = unpack_data.token0_pyth_feed_id;
+            assert_eq!(unpack_token0_pyth_feed_id, token0_pyth_feed_id);
+            let unpack_token1_pyth_feed_id = unpack_data.token1_pyth_feed_id;
+            assert_eq!(unpack_token1_pyth_feed_id, token1_pyth_feed_id);
             let unpack_padding1 = unpack_data.padding1;
             assert_eq!(unpack_padding1, padding1);
             let unpack_padding2 = unpack_data.padding2;
@@ -1885,44 +2234,44 @@ pub mod pool_test {
 
             //c=0, v=800000
             {
-                let fee_rate = pool_state.get_decay_fee_rate(0);
+                let fee_rate = pool_state.calculate_decay_fee_rate_all_side(0);
                 assert_eq!(fee_rate, 800_000); // 80% in hunderedths of a bip (10^-6)
 
-                let fee_rate = pool_state.get_decay_fee_rate(9);
+                let fee_rate = pool_state.calculate_decay_fee_rate_all_side(9);
                 assert_eq!(fee_rate, 800_000); // still 80%
             }
 
             // c=1, v=720000
             {
-                let fee_rate = pool_state.get_decay_fee_rate(10);
+                let fee_rate = pool_state.calculate_decay_fee_rate_all_side(10);
                 assert_eq!(fee_rate, 720_000); // 72% in hunderedths of a bip (10^-6)
 
-                let fee_rate = pool_state.get_decay_fee_rate(19);
+                let fee_rate = pool_state.calculate_decay_fee_rate_all_side(19);
                 assert_eq!(fee_rate, 720_000); // still 72%
             }
 
             // c=2, v=648000
             {
-                let fee_rate = pool_state.get_decay_fee_rate(20);
+                let fee_rate = pool_state.calculate_decay_fee_rate_all_side(20);
                 assert_eq!(fee_rate, 648_000); // 64.8% in hunderedths of a bip (10^-6)
 
-                let fee_rate = pool_state.get_decay_fee_rate(29);
+                let fee_rate = pool_state.calculate_decay_fee_rate_all_side(29);
                 assert_eq!(fee_rate, 648_000); // still 64.8%
             }
 
             // c=3, v=583200
             {
-                let fee_rate = pool_state.get_decay_fee_rate(30);
+                let fee_rate = pool_state.calculate_decay_fee_rate_all_side(30);
                 assert_eq!(fee_rate, 583_200); // 58.32% in hunderedths of a bip (10^-6)
 
-                let fee_rate = pool_state.get_decay_fee_rate(39);
+                let fee_rate = pool_state.calculate_decay_fee_rate_all_side(39);
                 assert_eq!(fee_rate, 583_200); // still 58.32%
             }
 
             // c=5, v=472392
             {
-                let fee_rate1 = pool_state.get_decay_fee_rate(50);
-                let fee_rate2 = pool_state.get_decay_fee_rate(59);
+                let fee_rate1 = pool_state.calculate_decay_fee_rate_all_side(50);
+                let fee_rate2 = pool_state.calculate_decay_fee_rate_all_side(59);
                 assert_eq!(fee_rate1, fee_rate2);
 
                 let diff = (fee_rate1 as i64 - 472392).abs() as u64;
@@ -1931,8 +2280,8 @@ pub mod pool_test {
 
             // c=10, v=278942
             {
-                let fee_rate1 = pool_state.get_decay_fee_rate(100);
-                let fee_rate2 = pool_state.get_decay_fee_rate(109);
+                let fee_rate1 = pool_state.calculate_decay_fee_rate_all_side(100);
+                let fee_rate2 = pool_state.calculate_decay_fee_rate_all_side(109);
                 assert_eq!(fee_rate1, fee_rate2);
 
                 let diff = (fee_rate1 as i64 - 278942).abs() as u64;
@@ -1941,8 +2290,8 @@ pub mod pool_test {
 
             // c=20, v=97261
             {
-                let fee_rate1 = pool_state.get_decay_fee_rate(200);
-                let fee_rate2 = pool_state.get_decay_fee_rate(209);
+                let fee_rate1 = pool_state.calculate_decay_fee_rate_all_side(200);
+                let fee_rate2 = pool_state.calculate_decay_fee_rate_all_side(209);
                 assert_eq!(fee_rate1, fee_rate2);
 
                 let diff = (fee_rate1 as i64 - 97261).abs() as u64;
@@ -1951,8 +2300,8 @@ pub mod pool_test {
 
             // c=50, v=4123
             {
-                let fee_rate1 = pool_state.get_decay_fee_rate(500);
-                let fee_rate2 = pool_state.get_decay_fee_rate(509);
+                let fee_rate1 = pool_state.calculate_decay_fee_rate_all_side(500);
+                let fee_rate2 = pool_state.calculate_decay_fee_rate_all_side(509);
                 assert_eq!(fee_rate1, fee_rate2);
 
                 let diff = (fee_rate1 as i64 - 4123).abs() as u64;
@@ -1961,13 +2310,98 @@ pub mod pool_test {
 
             // c=100, v=21
             {
-                let fee_rate1 = pool_state.get_decay_fee_rate(1000);
-                let fee_rate2 = pool_state.get_decay_fee_rate(1009);
+                let fee_rate1 = pool_state.calculate_decay_fee_rate_all_side(1000);
+                let fee_rate2 = pool_state.calculate_decay_fee_rate_all_side(1009);
                 assert_eq!(fee_rate1, fee_rate2);
 
                 let diff = (fee_rate1 as i64 - 21).abs() as u64;
                 assert!(diff < 10);
             }
+        }
+    }
+
+    mod base_trade_fee_test {
+        use super::*;
+
+        #[test]
+        fn test_get_decay_trade_fee_rate_with_swap_side() {
+            let mut pool_state = PoolState::default();
+            pool_state.initialize_decay_fee(true, false, 80, 10, 10).unwrap();
+
+            let rate_sell_mint0 = pool_state.get_decay_trade_fee_rate_with_swap_side(true, 0);
+            assert_eq!(rate_sell_mint0, 800_000);
+
+            let rate_sell_mint1 = pool_state.get_decay_trade_fee_rate_with_swap_side(false, 0);
+            assert_eq!(rate_sell_mint1, 0);
+        }
+
+        #[test]
+        fn test_disable_decay_fee_if_needed() {
+            let mut pool_state = PoolState::default();
+            pool_state.initialize_decay_fee(true, false, 80, 10, 10).unwrap();
+            assert!(pool_state.is_decay_fee_enabled());
+
+            pool_state.disable_decay_fee_if_needed(true, 500, 1_000).unwrap();
+            assert!(!pool_state.is_decay_fee_enabled());
+
+            pool_state.initialize_decay_fee(true, false, 80, 10, 10).unwrap();
+            pool_state.disable_decay_fee_if_needed(true, 800_000, 1_000).unwrap();
+            assert!(pool_state.is_decay_fee_enabled());
+        }
+
+        #[test]
+        fn test_calculate_base_trade_fee_rate() {
+            let mut pool_state = PoolState::default();
+            pool_state.initialize_decay_fee(true, false, 80, 10, 10).unwrap();
+
+            let mut amm_config = AmmConfig::default();
+            amm_config.trade_fee_rate = 1_000;
+
+            let rate = pool_state.calculate_base_trade_fee_rate(&amm_config, true, 0).unwrap();
+            assert_eq!(rate, 800_000);
+
+            let rate_other_side = pool_state.calculate_base_trade_fee_rate(&amm_config, false, 0).unwrap();
+            assert_eq!(rate_other_side, 1_000);
+        }
+
+        #[test]
+        fn test_get_effective_trade_fee_rate() {
+            let mut pool_state = PoolState::default();
+            let mut amm_config = AmmConfig::default();
+            amm_config.trade_fee_rate = 1_000;
+
+            // When pool.trade_fee_rate == 0, use amm_config's rate.
+            assert_eq!(pool_state.get_effective_trade_fee_rate(&amm_config), 1_000);
+
+            // When pool.trade_fee_rate != 0, use pool's rate.
+            pool_state.trade_fee_rate = 5_000;
+            assert_eq!(pool_state.get_effective_trade_fee_rate(&amm_config), 5_000);
+        }
+
+        #[test]
+        fn test_calculate_base_trade_fee_rate_with_pool_trade_fee_rate() {
+            let mut pool_state = PoolState::default();
+            let mut amm_config = AmmConfig::default();
+            amm_config.trade_fee_rate = 1_000;
+
+            // pool.trade_fee_rate = 0, use amm_config.trade_fee_rate.
+            let rate = pool_state.calculate_base_trade_fee_rate(&amm_config, true, 0).unwrap();
+            assert_eq!(rate, 1_000);
+
+            // pool.trade_fee_rate = 5000, use the pool's rate.
+            pool_state.trade_fee_rate = 5_000;
+            let rate = pool_state.calculate_base_trade_fee_rate(&amm_config, true, 0).unwrap();
+            assert_eq!(rate, 5_000);
+
+            // pool.trade_fee_rate = 5000, with decay fee enabled and higher than the pool rate; use decay fee.
+            pool_state.initialize_decay_fee(true, false, 80, 10, 10).unwrap();
+            let rate = pool_state.calculate_base_trade_fee_rate(&amm_config, true, 0).unwrap();
+            // decay fee rate = 80% = 800_000, larger than pool.trade_fee_rate = 5_000.
+            assert_eq!(rate, 800_000);
+
+            // Non-decay direction: use pool.trade_fee_rate.
+            let rate = pool_state.calculate_base_trade_fee_rate(&amm_config, false, 0).unwrap();
+            assert_eq!(rate, 5_000);
         }
     }
 }

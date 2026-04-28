@@ -1,9 +1,11 @@
 // 仅在测试时使用的utils
-
+#[cfg(test)]
 use anchor_lang::prelude::*;
 #[cfg(test)]
 use anchor_lang::ZeroCopy;
+#[cfg(test)]
 use std::cell::RefCell;
+#[cfg(test)]
 use std::rc::Rc;
 
 /// only for test

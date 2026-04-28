@@ -45,9 +45,21 @@ impl TickArrayContainer<'_> {
     /// So it is necessary to check the owner
     pub fn load_data_mut<'a>(acc_info: &'a AccountInfo) -> Result<TickArrayContainerRefMut<'a>> {
         if acc_info.owner != &crate::id() {
+            msg!(
+                "account owner error, account={}, {}:{}",
+                acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, crate::id())));
         }
         if !acc_info.is_writable {
+            msg!(
+                "account not mutable, account={}, {}:{}",
+                acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(ErrorCode::AccountNotMutable.into());
         }
 
@@ -84,6 +96,12 @@ impl TickArrayContainer<'_> {
 
             Ok(TickArrayContainerRefMut::Fixed(tick_array))
         } else {
+            msg!(
+                "account discriminator mismatch, account={}, {}:{}",
+                acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
     }
@@ -127,6 +145,12 @@ impl<'info> TickArrayContainer<'info> {
             // If the account is already initialized, just load it.
             // check account owner first
             if tick_array_account_info.owner != &crate::id() {
+                msg!(
+                    "account owner error, account={}, {}:{}",
+                    tick_array_account_info.key(),
+                    file!(),
+                    line!()
+                );
                 return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram)
                     .with_pubkeys((*tick_array_account_info.owner, crate::id())));
             }
@@ -156,6 +180,12 @@ impl<'info> TickArrayContainer<'info> {
 
                 return Ok(TickArrayContainer::Dynamic(dyn_tick_array_loader));
             } else {
+                msg!(
+                    "account discriminator mismatch, account={}, {}:{}",
+                    tick_array_account_info.key(),
+                    file!(),
+                    line!()
+                );
                 return Err(ErrorCode::AccountDiscriminatorMismatch.into());
             };
         };
@@ -171,6 +201,12 @@ impl<'info> TickArrayContainer<'info> {
         tick_spacing: u16,
     ) -> Result<TickArrayContainer<'info>> {
         if tick_array_account_info.owner != &crate::id() {
+            msg!(
+                "account owner error, account={}, {}:{}",
+                tick_array_account_info.key(),
+                file!(),
+                line!()
+            );
             return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram)
                 .with_pubkeys((*tick_array_account_info.owner, crate::id())));
         }
@@ -180,6 +216,12 @@ impl<'info> TickArrayContainer<'info> {
         } else if Self::is_match_discriminator(tick_array_account_info, DynTickArrayState::DISCRIMINATOR)? {
             Self::validate_and_load_dynamic(tick_array_account_info, access_tick_index, tick_spacing)
         } else {
+            msg!(
+                "account discriminator mismatch, account={}, {}:{}",
+                tick_array_account_info.key(),
+                file!(),
+                line!()
+            );
             Err(ErrorCode::AccountDiscriminatorMismatch.into())
         }
     }
@@ -200,10 +242,10 @@ impl<'info> TickArrayContainer<'info> {
 
             let offset_in_array = tick_array.get_tick_offset_in_array(access_tick_index, tick_spacing)?;
 
-            // require!(
-            //     tick_array.ticks[offset_in_array].tick != 0,
-            //     ClmmErrorCode::InvalidTickIndex
-            // );
+            require!(
+                tick_array.ticks[offset_in_array].tick == access_tick_index,
+                ClmmErrorCode::InvalidTickIndex
+            );
         }
 
         Ok(TickArrayContainer::Fixed(tick_array_loader))
@@ -225,10 +267,10 @@ impl<'info> TickArrayContainer<'info> {
 
             let offset_in_array = dyn_tick_header.get_tick_index_in_array(access_tick_index, tick_spacing)?;
 
-            // require!(
-            //     dyn_tick_states[offset_in_array as usize].tick != 0,
-            //     ClmmErrorCode::InvalidTickIndex
-            // );
+            require!(
+                dyn_tick_states[offset_in_array as usize].tick == access_tick_index,
+                ClmmErrorCode::InvalidTickIndex
+            );
         }
 
         Ok(TickArrayContainer::Dynamic(dyn_tick_array_loader))
@@ -239,6 +281,12 @@ impl<'info> TickArrayContainer<'info> {
     /// after loading, will NOT check if the access_tick_index is in
     pub fn try_from_without_check(tick_array_account_info: &AccountInfo<'info>) -> Result<TickArrayContainer<'info>> {
         if tick_array_account_info.owner != &crate::id() {
+            msg!(
+                "account owner error, account={}, {}:{}",
+                tick_array_account_info.key(),
+                file!(),
+                line!()
+            );
             return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram)
                 .with_pubkeys((*tick_array_account_info.owner, crate::id())));
         }
@@ -254,6 +302,12 @@ impl<'info> TickArrayContainer<'info> {
 
             Ok(TickArrayContainer::Dynamic(dyn_tick_array_loader))
         } else {
+            msg!(
+                "account discriminator mismatch, account={}, {}:{}",
+                tick_array_account_info.key(),
+                file!(),
+                line!()
+            );
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
     }

@@ -42,3 +42,12 @@ pub use create_support_mint_associated::*;
 
 pub mod close_protocol_position;
 pub use close_protocol_position::*;
+
+pub mod set_pool_quote_flag;
+pub use set_pool_quote_flag::*;
+
+pub mod set_swap_dynamic_fee_params;
+pub use set_swap_dynamic_fee_params::*;
+
+pub mod set_pool_trade_fee_rate;
+pub use set_pool_trade_fee_rate::*;

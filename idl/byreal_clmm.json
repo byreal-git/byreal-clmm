@@ -2237,7 +2237,8 @@
         "* `liquidity` - The desired liquidity to be added, if zero, calculate liquidity base amount_0 or amount_1 according base_flag",
         "* `amount_0_max` - The max amount of token_0 to spend, which serves as a slippage check",
         "* `amount_1_max` - The max amount of token_1 to spend, which serves as a slippage check",
-        "* `base_flag` - must be specified if liquidity is zero, true: calculate liquidity base amount_0_max otherwise base amount_1_max",
+        "* `base_flag` - Now, we don't use base_flag, it can be None;",
+        "We directly calculate liquidity from amount_0_max or amount_1_max according to the current price in pool.",
         ""
       ],
       "discriminator": [
@@ -3597,6 +3598,122 @@
       ]
     },
     {
+      "name": "set_pool_quote_flag",
+      "docs": [
+        "设置 pool 的 quote token 标识"
+      ],
+      "discriminator": [
+        250,
+        38,
+        116,
+        122,
+        249,
+        128,
+        108,
+        105
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "必须是 pool_manager 权限"
+          ],
+          "signer": true
+        },
+        {
+          "name": "admin_group",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110,
+                  95,
+                  103,
+                  114,
+                  111,
+                  117,
+                  112
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_state",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "token1_as_quote",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_pool_trade_fee_rate",
+      "docs": [
+        "设置 pool 专属的 trade_fee_rate"
+      ],
+      "discriminator": [
+        109,
+        117,
+        170,
+        34,
+        87,
+        202,
+        50,
+        20
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "必须是 pool_manager 权限（与 create_pool 一致）"
+          ],
+          "signer": true
+        },
+        {
+          "name": "admin_group",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110,
+                  95,
+                  103,
+                  114,
+                  111,
+                  117,
+                  112
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_state",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "trade_fee_rate",
+          "type": "u32"
+        }
+      ]
+    },
+    {
       "name": "set_reward_params",
       "docs": [
         "Reset reward param, start a new reward cycle or extend the current cycle.",
@@ -3717,6 +3834,68 @@
         {
           "name": "end_time",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_swap_dynamic_fee_params",
+      "docs": [
+        "设置 swap-dynamic-fee 参数"
+      ],
+      "discriminator": [
+        169,
+        23,
+        133,
+        74,
+        115,
+        251,
+        233,
+        52
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "必须是 pool_manager 权限 (与 create_pool 一致)"
+          ],
+          "signer": true
+        },
+        {
+          "name": "admin_group",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  100,
+                  109,
+                  105,
+                  110,
+                  95,
+                  103,
+                  114,
+                  111,
+                  117,
+                  112
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_state",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "SetSwapDynamicFeeParamsInput"
+            }
+          }
         }
       ]
     },
@@ -3855,6 +4034,131 @@
         201,
         30,
         98
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "The user performing the swap"
+          ],
+          "signer": true
+        },
+        {
+          "name": "amm_config",
+          "docs": [
+            "The factory state to read protocol fees"
+          ]
+        },
+        {
+          "name": "pool_state",
+          "docs": [
+            "The program account of the pool in which the swap will be performed"
+          ],
+          "writable": true
+        },
+        {
+          "name": "input_token_account",
+          "docs": [
+            "The user token account for input token"
+          ],
+          "writable": true
+        },
+        {
+          "name": "output_token_account",
+          "docs": [
+            "The user token account for output token"
+          ],
+          "writable": true
+        },
+        {
+          "name": "input_vault",
+          "docs": [
+            "The vault token account for input token"
+          ],
+          "writable": true
+        },
+        {
+          "name": "output_vault",
+          "docs": [
+            "The vault token account for output token"
+          ],
+          "writable": true
+        },
+        {
+          "name": "observation_state",
+          "docs": [
+            "The program account for the most recent oracle observation"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "docs": [
+            "SPL program for token transfers"
+          ],
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_program_2022",
+          "docs": [
+            "SPL program 2022 for token transfers"
+          ],
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "memo_program",
+          "docs": [
+            "Memo program"
+          ],
+          "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "input_vault_mint",
+          "docs": [
+            "The mint of token vault 0"
+          ]
+        },
+        {
+          "name": "output_vault_mint",
+          "docs": [
+            "The mint of token vault 1"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "other_amount_threshold",
+          "type": "u64"
+        },
+        {
+          "name": "sqrt_price_limit_x64",
+          "type": "u128"
+        },
+        {
+          "name": "is_base_input",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "swap_v3_dyn",
+      "docs": [
+        "swap_v3_dyn: 支持动态费率的 swap 指令",
+        "如果pool不支持 swap-dynamic-fee，则行为与 swap_v2 相同"
+      ],
+      "discriminator": [
+        229,
+        46,
+        213,
+        132,
+        105,
+        40,
+        40,
+        228
       ],
       "accounts": [
         {
@@ -5082,6 +5386,26 @@
       "code": 6047,
       "name": "DecayFeeNeitherOnSellMint0NorMint1",
       "msg": "Invalid decay fee params"
+    },
+    {
+      "code": 6048,
+      "name": "SwapDynamicFeeEnabled",
+      "msg": "Swap dynamic fee is enabled, must use swap_v3_dyn instruction"
+    },
+    {
+      "code": 6049,
+      "name": "InvalidPythOracleAccount",
+      "msg": "Invalid pyth oracle account"
+    },
+    {
+      "code": 6050,
+      "name": "PythPriceStale",
+      "msg": "Pyth price is stale"
+    },
+    {
+      "code": 6051,
+      "name": "InvalidSwapDynamicFeeParams",
+      "msg": "Invalid swap dynamic fee params"
     }
   ],
   "types": [
@@ -6437,9 +6761,17 @@
             "type": {
               "array": [
                 "u8",
-                7
+                3
               ]
             }
+          },
+          {
+            "name": "trade_fee_rate",
+            "docs": [
+              "如果该值不为0， 则会覆盖 amm config 中的 trade_fee_rate 参数，作为实际收取的 trade fee rate",
+              "The trade fee, denominated in hundredths of a bip (10^-6)"
+            ],
+            "type": "u32"
           },
           {
             "name": "reward_infos",
@@ -6507,10 +6839,13 @@
           {
             "name": "decay_fee_flag",
             "docs": [
-              "decay fee flag",
+              "--- decay fee flag",
               "bit0, 1: use decay fee, 0: not use decay fee",
               "bit1, 1: use decay fee on sell for mint0, 0: not use decay fee on sell for mint0",
-              "bit2, 1: use decay fee on sell for mint1, 0: not use decay fee on sell for mint1"
+              "bit2, 1: use decay fee on sell for mint1, 0: not use decay fee on sell for mint1",
+              "--- swap-dynamic-fee-flag",
+              "bit3, 1: token1 as quote token; token0 as quote token",
+              "bit4, 1: 启用 swap-dynamic-fee; 0: 不启用 swap-dynamic-fee"
             ],
             "type": "u8"
           },
@@ -6536,11 +6871,70 @@
             "type": "u8"
           },
           {
+            "name": "arbitrage_fee_buffer_ppm",
+            "docs": [
+              "arbitrage_fee: 手工设置的一个容忍度，价差小于该值，不收取 arbitrageFee；单位取 10^-6（percent-per-million）；"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "trade_slippage_fee_base",
+            "docs": [
+              "trade_slippage_fee: 公式中的b值，单位取 1/1000"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "trade_slippage_fee_trade_size_threshold",
+            "docs": [
+              "归一化（按quote数量计算）的swap-size值; 单位取 100"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "imbalance_fee_base",
+            "docs": [
+              "公式中的b,单位取1/10"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "imbalance_fee_x",
+            "docs": [
+              "公式中的x;单位取 1/100"
+            ],
+            "type": "u8"
+          },
+          {
             "name": "padding1_1",
             "type": {
               "array": [
                 "u8",
-                4
+                6
+              ]
+            }
+          },
+          {
+            "name": "token0_pyth_feed_id",
+            "docs": [
+              "Pyth feed id for base token."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "token1_pyth_feed_id",
+            "docs": [
+              "Pyth feed id for quote token."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
               ]
             }
           },
@@ -6549,7 +6943,7 @@
             "type": {
               "array": [
                 "u64",
-                23
+                14
               ]
             }
           },
@@ -6767,6 +7161,94 @@
               "emissions were turned on."
             ],
             "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SetSwapDynamicFeeParamsInput",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "enabled",
+            "docs": [
+              "是否启用 swap-dynamic-fee"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "arbitrage_fee_buffer_ppm",
+            "docs": [
+              "arbitrage_fee 缓冲值，单位 ppm (10^-6)"
+            ],
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "trade_slippage_fee_base",
+            "docs": [
+              "trade_slippage_fee 基数，单位 1/1000"
+            ],
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "trade_slippage_fee_trade_size_threshold",
+            "docs": [
+              "trade_slippage_fee 阈值，单位 100"
+            ],
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "imbalance_fee_base",
+            "docs": [
+              "imbalance_fee 基数，单位 1/10"
+            ],
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "imbalance_fee_x",
+            "docs": [
+              "imbalance_fee 阈值，单位 1/100"
+            ],
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "token0_pyth_feed_id",
+            "docs": [
+              "token0 的 Pyth feed id"
+            ],
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          },
+          {
+            "name": "token1_pyth_feed_id",
+            "docs": [
+              "token1 的 Pyth feed id"
+            ],
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
           }
         ]
       }

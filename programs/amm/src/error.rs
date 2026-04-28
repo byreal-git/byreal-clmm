@@ -113,4 +113,13 @@ pub enum ErrorCode {
 
     #[msg("Invalid decay fee params")]
     DecayFeeNeitherOnSellMint0NorMint1,
+
+    #[msg("Swap dynamic fee is enabled, must use swap_v3_dyn instruction")]
+    SwapDynamicFeeEnabled,
+    #[msg("Invalid pyth oracle account")]
+    InvalidPythOracleAccount,
+    #[msg("Pyth price is stale")]
+    PythPriceStale,
+    #[msg("Invalid swap dynamic fee params")]
+    InvalidSwapDynamicFeeParams,
 }

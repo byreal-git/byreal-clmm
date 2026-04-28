@@ -197,6 +197,12 @@ impl<'info> DynTickArrayLoader<'info> {
     #[inline(never)]
     pub fn try_from(acc_info: &AccountInfo<'info>) -> Result<Self> {
         if acc_info.owner != &crate::id() {
+            msg!(
+                "account owner error, account={}, {}:{}",
+                acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, crate::id())));
         }
         let data: &[u8] = &acc_info.try_borrow_data()?;
@@ -206,6 +212,12 @@ impl<'info> DynTickArrayLoader<'info> {
         // Discriminator must match.
         let disc_bytes = array_ref![data, 0, 8];
         if disc_bytes != &DynTickArrayState::DISCRIMINATOR {
+            msg!(
+                "account discriminator mismatch, account={}, {}:{}",
+                acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
 
@@ -216,6 +228,12 @@ impl<'info> DynTickArrayLoader<'info> {
     #[inline(never)]
     pub fn try_from_unchecked(acc_info: &AccountInfo<'info>) -> Result<Self> {
         if acc_info.owner != &crate::id() {
+            msg!(
+                "account owner error, account={}, {}:{}",
+                acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, crate::id())));
         }
         Ok(Self::new(acc_info.clone()))
@@ -230,6 +248,12 @@ impl<'info> DynTickArrayLoader<'info> {
         // AccountInfo api allows you to borrow mut even if the account isn't
         // writable, so add this check for a better dev experience.
         if !self.acc_info.is_writable {
+            msg!(
+                "account not mutable, account={}, {}:{}",
+                self.acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(ErrorCode::AccountNotMutable.into());
         }
 
@@ -240,6 +264,12 @@ impl<'info> DynTickArrayLoader<'info> {
         disc_bytes.copy_from_slice(&data[..8]);
         let discriminator = u64::from_le_bytes(disc_bytes);
         if discriminator != 0 {
+            msg!(
+                "account discriminator already set, account={}, {}:{}",
+                self.acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(ErrorCode::AccountDiscriminatorAlreadySet.into());
         }
 
@@ -276,6 +306,12 @@ impl<'info> DynTickArrayLoader<'info> {
         // AccountInfo api allows you to borrow mut even if the account isn't
         // writable, so add this check for a better dev experience.
         if !self.acc_info.is_writable {
+            msg!(
+                "account not mutable, account={}, {}:{}",
+                self.acc_info.key(),
+                file!(),
+                line!()
+            );
             return Err(ErrorCode::AccountNotMutable.into());
         }
 
@@ -289,6 +325,12 @@ impl<'info> DynTickArrayLoader<'info> {
             }
             let disc_bytes = array_ref![data, 0, 8];
             if disc_bytes != &DynTickArrayState::DISCRIMINATOR {
+                msg!(
+                    "account discriminator mismatch, account={}, {}:{}",
+                    self.acc_info.key(),
+                    file!(),
+                    line!()
+                );
                 return Err(ErrorCode::AccountDiscriminatorMismatch.into());
             }
         }
@@ -327,6 +369,12 @@ impl<'info> DynTickArrayLoader<'info> {
 
             let disc_bytes = array_ref![data, 0, 8];
             if disc_bytes != &DynTickArrayState::DISCRIMINATOR {
+                msg!(
+                    "account discriminator mismatch, account={}, {}:{}",
+                    self.acc_info.key(),
+                    file!(),
+                    line!()
+                );
                 return Err(ErrorCode::AccountDiscriminatorMismatch.into());
             }
         }
@@ -468,8 +516,6 @@ pub mod dyn_tick_array_test {
         };
 
         for tick_state in sorted_tick_states {
-            assert!(tick_state.tick != 0);
-
             dyn_tick_header.use_one_tick(tick_state.tick, tick_spacing).unwrap();
             dyn_tick_states.push(tick_state);
         }

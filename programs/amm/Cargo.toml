@@ -31,18 +31,10 @@ uint = { git = "https://github.com/raydium-io/parity-common", package = "uint" }
 bytemuck = { version = "1.19.0", features = ["derive", "min_const_generics"] }
 arrayref = { version = "0.3.6" }
 solana-security-txt = "1.1.1"
+# Pinned to match anchor 0.31.1
+pyth-solana-receiver-sdk = "=1.0.0"
 
 [dev-dependencies]
 quickcheck = "0.9"
 proptest = "1.0"
 rand = "0.8.5"
-
-[profile.release]
-lto = "fat"
-codegen-units = 1
-panic = "abort"
-overflow-checks = true
-[profile.release.build-override]
-opt-level = 3
-incremental = false
-codegen-units = 1

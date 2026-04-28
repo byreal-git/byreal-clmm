@@ -1,3 +1,6 @@
+#![allow(unexpected_cfgs)]
+#![allow(deprecated)]
+
 pub mod error;
 pub mod instructions;
 pub mod libraries;
@@ -142,6 +145,25 @@ pub mod byreal_clmm {
     ///
     pub fn update_pool_status(ctx: Context<UpdatePoolStatus>, status: u8) -> Result<()> {
         instructions::update_pool_status(ctx, status)
+    }
+
+    /// Set the quote-token flag for the pool
+    pub fn set_pool_quote_flag(ctx: Context<SetPoolQuoteFlag>, token1_as_quote: bool) -> Result<()> {
+        instructions::set_pool_quote_flag(ctx, token1_as_quote)
+    }
+
+    /// Set a pool-specific trade_fee_rate
+    pub fn set_pool_trade_fee_rate(ctx: Context<SetPoolTradeFeeRate>, trade_fee_rate: u32) -> Result<()> {
+        assert!(trade_fee_rate < FEE_RATE_DENOMINATOR_VALUE);
+        instructions::set_pool_trade_fee_rate(ctx, trade_fee_rate)
+    }
+
+    /// Set the swap-dynamic-fee parameters
+    pub fn set_swap_dynamic_fee_params(
+        ctx: Context<SetSwapDynamicFeeParams>,
+        params: SetSwapDynamicFeeParamsInput,
+    ) -> Result<()> {
+        instructions::set_swap_dynamic_fee_params(ctx, params)
     }
 
     /// Creates an operation account for the program
@@ -536,6 +558,18 @@ pub mod byreal_clmm {
         is_base_input: bool,
     ) -> Result<()> {
         instructions::swap_v2(ctx, amount, other_amount_threshold, sqrt_price_limit_x64, is_base_input)
+    }
+
+    /// swap_v3_dyn: a swap instruction that supports dynamic fees.
+    /// If the pool does not have swap-dynamic-fee enabled, the behaviour is identical to swap_v2.
+    pub fn swap_v3_dyn<'a, 'b, 'c: 'info, 'info>(
+        ctx: Context<'a, 'b, 'c, 'info, SwapSingleV2<'info>>,
+        amount: u64,
+        other_amount_threshold: u64,
+        sqrt_price_limit_x64: u128,
+        is_base_input: bool,
+    ) -> Result<()> {
+        instructions::swap_v3_dyn(ctx, amount, other_amount_threshold, sqrt_price_limit_x64, is_base_input)
     }
 
     //== drop this method

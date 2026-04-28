@@ -3,7 +3,7 @@ use std::ops::Deref;
 
 use crate::error::ErrorCode;
 use crate::libraries::tick_math;
-use crate::swap::swap_internal;
+use crate::swap::swap_internal_with_fee_rate;
 use crate::util::*;
 use crate::{states::*, util};
 use anchor_lang::{prelude::*, solana_program};
@@ -82,6 +82,37 @@ pub fn exact_internal_v2<'c: 'info, 'info>(
     sqrt_price_limit_x64: u128,
     is_base_input: bool,
 ) -> Result<u64> {
+    let trade_fee_rate = {
+        let mut pool_state = ctx.pool_state.load_mut()?;
+        let zero_for_one = ctx.input_vault.mint == pool_state.token_mint_0;
+        let block_timestamp = oracle::block_timestamp() as u64;
+        let trade_fee_rate =
+            pool_state.calculate_base_trade_fee_rate(&ctx.amm_config, zero_for_one, block_timestamp)?;
+        let decay_trade_fee_rate = pool_state.get_decay_trade_fee_rate_with_swap_side(zero_for_one, block_timestamp);
+        // Use decay_trade_fee_rate and effective base_trade_fee_rate to decide whether to disable decay fee:
+        // if decay_trade_fee_rate has already converged to base_trade_fee_rate, there is no need to disable again.
+        let effective_base_rate = pool_state.get_effective_trade_fee_rate(&ctx.amm_config);
+        pool_state.disable_decay_fee_if_needed(zero_for_one, decay_trade_fee_rate, effective_base_rate)?;
+        trade_fee_rate
+    };
+    exact_internal_v2_with_fee_rate(
+        ctx,
+        remaining_accounts,
+        amount_specified,
+        sqrt_price_limit_x64,
+        is_base_input,
+        trade_fee_rate,
+    )
+}
+
+pub fn exact_internal_v2_with_fee_rate<'c: 'info, 'info>(
+    ctx: &mut SwapSingleV2<'info>,
+    remaining_accounts: &'c [AccountInfo<'info>],
+    amount_specified: u64,
+    sqrt_price_limit_x64: u128,
+    is_base_input: bool,
+    trade_fee_rate: u32,
+) -> Result<u64> {
     // invoke_memo_instruction(SWAP_MEMO_MSG, ctx.memo_program.to_account_info())?;
 
     let block_timestamp = solana_program::clock::Clock::get()?.unix_timestamp as u64;
@@ -132,28 +163,34 @@ pub fn exact_internal_v2<'c: 'info, 'info>(
                 );
                 continue;
             }
-            tick_array_states.push_back(TickArrayContainer::load_data_mut(account_info)?);
+            // Tolerate unrelated accounts in remaining_accounts, as long as the tick_array entries are present.
+            if let Ok(tick_array_container) = TickArrayContainer::load_data_mut(account_info) {
+                tick_array_states.push_back(tick_array_container);
+            }
         }
 
-        (amount_0, amount_1) = swap_internal(
+        let sqrt_price_limit = if sqrt_price_limit_x64 == 0 {
+            if zero_for_one {
+                tick_math::MIN_SQRT_PRICE_X64 + 1
+            } else {
+                tick_math::MAX_SQRT_PRICE_X64 - 1
+            }
+        } else {
+            sqrt_price_limit_x64
+        };
+
+        (amount_0, amount_1) = swap_internal_with_fee_rate(
             &ctx.amm_config,
             pool_state,
             tick_array_states,
             &mut ctx.observation_state.load_mut()?,
             &tickarray_bitmap_extension,
             amount_calculate_specified,
-            if sqrt_price_limit_x64 == 0 {
-                if zero_for_one {
-                    tick_math::MIN_SQRT_PRICE_X64 + 1
-                } else {
-                    tick_math::MAX_SQRT_PRICE_X64 - 1
-                }
-            } else {
-                sqrt_price_limit_x64
-            },
+            sqrt_price_limit,
             zero_for_one,
             is_base_input,
             oracle::block_timestamp(),
+            trade_fee_rate,
         )?;
 
         #[cfg(feature = "enable-log")]
@@ -339,6 +376,10 @@ pub fn swap_v2<'a, 'b, 'c: 'info, 'info>(
     sqrt_price_limit_x64: u128,
     is_base_input: bool,
 ) -> Result<()> {
+    if ctx.accounts.pool_state.load()?.is_swap_dynamic_fee_enabled() {
+        return err!(ErrorCode::SwapDynamicFeeEnabled);
+    }
+
     let amount_result = exact_internal_v2(
         ctx.accounts,
         ctx.remaining_accounts,

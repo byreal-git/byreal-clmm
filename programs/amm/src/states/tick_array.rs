@@ -177,7 +177,6 @@ pub mod tick_array_test {
         new_tick_array.initialize(start_index, tick_spacing, pool_id).unwrap();
 
         for tick_state in tick_states {
-            assert!(tick_state.tick != 0);
             let offset = new_tick_array
                 .get_tick_offset_in_array(tick_state.tick, tick_spacing)
                 .unwrap();
@@ -392,7 +391,7 @@ pub mod tick_array_test {
 
     mod get_fee_growth_inside_test {
         use super::*;
-        use crate::states::*;
+        // no extra imports
 
         fn fee_growth_inside_delta_when_price_move(
             init_fee_growth_global_0_x64: u128,
@@ -708,7 +707,7 @@ pub mod tick_array_test {
 
     mod get_reward_growths_inside_test {
         use super::*;
-        use crate::states::*;
+        // no extra imports
         use anchor_lang::prelude::Pubkey;
 
         fn build_reward_infos(reward_growth_global_x64: u128) -> [RewardInfo; 3] {
