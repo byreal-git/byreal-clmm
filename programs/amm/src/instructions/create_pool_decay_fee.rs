@@ -178,22 +178,13 @@ pub struct CreatePoolDecayFeeParams {
     pub decay_fee_decrease_interval: u8,
 }
 
-pub fn create_pool_decay_fee(
-    ctx: Context<CreatePool>,
-    params: CreatePoolDecayFeeParams,
-) -> Result<()> {
-    let mint0_associated_is_initialized = util::support_mint_associated_is_initialized(
-        &ctx.remaining_accounts,
-        &ctx.accounts.token_mint_0,
-    )?;
-    let mint1_associated_is_initialized = util::support_mint_associated_is_initialized(
-        &ctx.remaining_accounts,
-        &ctx.accounts.token_mint_1,
-    )?;
-    if !(util::is_supported_mint(&ctx.accounts.token_mint_0, mint0_associated_is_initialized)
-        .unwrap()
-        && util::is_supported_mint(&ctx.accounts.token_mint_1, mint1_associated_is_initialized)
-            .unwrap())
+pub fn create_pool_decay_fee(ctx: Context<CreatePool>, params: CreatePoolDecayFeeParams) -> Result<()> {
+    let mint0_associated_is_initialized =
+        util::support_mint_associated_is_initialized(&ctx.remaining_accounts, &ctx.accounts.token_mint_0)?;
+    let mint1_associated_is_initialized =
+        util::support_mint_associated_is_initialized(&ctx.remaining_accounts, &ctx.accounts.token_mint_1)?;
+    if !(util::is_supported_mint(&ctx.accounts.token_mint_0, mint0_associated_is_initialized).unwrap()
+        && util::is_supported_mint(&ctx.accounts.token_mint_1, mint1_associated_is_initialized).unwrap())
     {
         return err!(ErrorCode::NotSupportMint);
     }
@@ -256,10 +247,7 @@ pub fn create_pool_decay_fee(
     )?;
 
     // init observation
-    ctx.accounts
-        .observation_state
-        .load_init()?
-        .initialize(pool_id)?;
+    ctx.accounts.observation_state.load_init()?.initialize(pool_id)?;
 
     let bump = ctx.bumps.pool_state;
     pool_state.initialize(
@@ -287,10 +275,7 @@ pub fn create_pool_decay_fee(
         )?;
     }
 
-    ctx.accounts
-        .tick_array_bitmap
-        .load_init()?
-        .initialize(pool_id);
+    ctx.accounts.tick_array_bitmap.load_init()?.initialize(pool_id);
 
     emit!(PoolCreatedEvent {
         token_mint_0: ctx.accounts.token_mint_0.key(),

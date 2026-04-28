@@ -35,10 +35,7 @@ pub fn create_or_allocate_account<'a>(
             program_id,
         )?;
     } else {
-        let required_lamports = rent
-            .minimum_balance(space)
-            .max(1)
-            .saturating_sub(current_lamports);
+        let required_lamports = rent.minimum_balance(space).max(1).saturating_sub(current_lamports);
         if required_lamports > 0 {
             let cpi_accounts = system_program::Transfer {
                 from: payer.to_account_info(),
@@ -51,10 +48,7 @@ pub fn create_or_allocate_account<'a>(
             account_to_allocate: target_account.clone(),
         };
         let cpi_context = CpiContext::new(system_program.clone(), cpi_accounts);
-        system_program::allocate(
-            cpi_context.with_signer(&[siger_seed]),
-            u64::try_from(space).unwrap(),
-        )?;
+        system_program::allocate(cpi_context.with_signer(&[siger_seed]), u64::try_from(space).unwrap())?;
 
         let cpi_accounts = system_program::Assign {
             account_to_assign: target_account.clone(),
@@ -74,11 +68,7 @@ pub fn realloc_account_if_needed<'a>(
     system_program: &AccountInfo<'a>,
 ) -> Result<bool> {
     // Sanity checks
-    require_keys_eq!(
-        *target_account.owner,
-        crate::id(),
-        ClmmErrorCode::IllegalAccountOwner
-    );
+    require_keys_eq!(*target_account.owner, crate::id(), ClmmErrorCode::IllegalAccountOwner);
 
     let current_account_size = target_account.data.borrow().len();
 
@@ -91,19 +81,11 @@ pub fn realloc_account_if_needed<'a>(
     AccountInfo::resize(target_account, new_account_space)?;
 
     // If more lamports are needed, transfer them to the account.
-    let rent_exempt_lamports = Rent::get()
-        .unwrap()
-        .minimum_balance(new_account_space)
-        .max(1);
-    let top_up_lamports =
-        rent_exempt_lamports.saturating_sub(target_account.to_account_info().lamports());
+    let rent_exempt_lamports = Rent::get().unwrap().minimum_balance(new_account_space).max(1);
+    let top_up_lamports = rent_exempt_lamports.saturating_sub(target_account.to_account_info().lamports());
 
     if top_up_lamports > 0 {
-        require_keys_eq!(
-            *system_program.key,
-            system_program::ID,
-            ClmmErrorCode::InvalidAccount
-        );
+        require_keys_eq!(*system_program.key, system_program::ID, ClmmErrorCode::InvalidAccount);
 
         system_program::transfer(
             CpiContext::new(
@@ -128,9 +110,5 @@ pub fn get_recent_epoch() -> Result<u64> {
 #[cfg(any(test, feature = "client"))]
 pub fn get_recent_epoch() -> Result<u64> {
     use std::time::{SystemTime, UNIX_EPOCH};
-    Ok(SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        / (2 * 24 * 3600))
+    Ok(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() / (2 * 24 * 3600))
 }

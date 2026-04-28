@@ -84,10 +84,7 @@ pub fn claim_offchain_reward(ctx: Context<ClaimOffchainRewardAccounts>, amount: 
         ErrorCode::InvalidAccount
     );
 
-    if !reward_config
-        .reward_mint_vec
-        .contains(&ctx.accounts.token_mint.key())
-    {
+    if !reward_config.reward_mint_vec.contains(&ctx.accounts.token_mint.key()) {
         return err!(ErrorCode::NotSupportMint);
     }
 
@@ -103,11 +100,7 @@ pub fn claim_offchain_reward(ctx: Context<ClaimOffchainRewardAccounts>, amount: 
     };
 
     token_interface::transfer_checked(
-        CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            cpi_accounts,
-            &[&seeds],
-        ),
+        CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), cpi_accounts, &[&seeds]),
         amount,
         decimals,
     )?;

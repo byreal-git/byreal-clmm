@@ -57,11 +57,7 @@ pub fn get_next_sqrt_price_from_amount_0_rounding_up(
         )
         .as_u128()
     } else {
-        let product = U256::from(
-            U256::from(amount)
-                .checked_mul(U256::from(sqrt_price_x64))
-                .unwrap(),
-        );
+        let product = U256::from(U256::from(amount).checked_mul(U256::from(sqrt_price_x64)).unwrap());
         let denominator = numerator_1.checked_sub(product).unwrap();
         numerator_1
             .mul_div_ceil(U256::from(sqrt_price_x64), denominator)
@@ -135,12 +131,7 @@ pub fn get_next_sqrt_price_from_output(
     assert!(liquidity > 0);
 
     if zero_for_one {
-        get_next_sqrt_price_from_amount_1_rounding_down(
-            sqrt_price_x64,
-            liquidity,
-            amount_out,
-            false,
-        )
+        get_next_sqrt_price_from_amount_1_rounding_down(sqrt_price_x64, liquidity, amount_out, false)
     } else {
         get_next_sqrt_price_from_amount_0_rounding_up(sqrt_price_x64, liquidity, amount_out, false)
     }

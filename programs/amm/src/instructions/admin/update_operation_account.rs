@@ -32,11 +32,7 @@ pub struct UpdateOperationAccount<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn update_operation_account(
-    ctx: Context<UpdateOperationAccount>,
-    param: u8,
-    keys: Vec<Pubkey>,
-) -> Result<()> {
+pub fn update_operation_account(ctx: Context<UpdateOperationAccount>, param: u8, keys: Vec<Pubkey>) -> Result<()> {
     let mut operation_state = ctx.accounts.operation_state.load_mut()?;
     let match_param = Some(param);
     match match_param {

@@ -74,10 +74,7 @@ pub struct DepositOffchainRewardAccounts<'info> {
 }
 
 /// Deposit offchain reward into the reward vault.
-pub fn deposit_offchain_reward(
-    ctx: Context<DepositOffchainRewardAccounts>,
-    amount: u64,
-) -> Result<()> {
+pub fn deposit_offchain_reward(ctx: Context<DepositOffchainRewardAccounts>, amount: u64) -> Result<()> {
     let reward_config = ctx.accounts.reward_config.deref_mut();
 
     require_keys_eq!(

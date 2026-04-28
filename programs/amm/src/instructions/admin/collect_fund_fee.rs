@@ -1,7 +1,9 @@
 use crate::decrease_liquidity::check_unclaimed_fees_and_vault;
+use crate::error::ErrorCode as ClmmErrorCode;
 use crate::states::*;
 use crate::util::*;
 use anchor_lang::prelude::*;
+use anchor_spl::associated_token::get_associated_token_address_with_program_id;
 use anchor_spl::token::Token;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 #[derive(Accounts)]
@@ -47,19 +49,11 @@ pub struct CollectFundFee<'info> {
     pub vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// The address that receives the collected token_0 protocol fees
-    #[account(
-        mut,
-        associated_token::mint = vault_0_mint,
-        associated_token::authority = admin_group.fee_keeper,
-    )]
+    #[account(mut)]
     pub recipient_token_account_0: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// The address that receives the collected token_1 protocol fees
-    #[account(
-        mut,
-        associated_token::mint = vault_1_mint,
-        associated_token::authority = admin_group.fee_keeper,
-    )]
+    #[account(mut)]
     pub recipient_token_account_1: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// The SPL program to perform token transfers
@@ -71,13 +65,33 @@ pub struct CollectFundFee<'info> {
     pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
 }
 
-pub fn collect_fund_fee(
-    ctx: Context<CollectFundFee>,
-    amount_0_requested: u64,
-    amount_1_requested: u64,
-) -> Result<()> {
+pub fn collect_fund_fee(ctx: Context<CollectFundFee>, amount_0_requested: u64, amount_1_requested: u64) -> Result<()> {
     // check if the admin group is valid
     ctx.accounts.admin_group.validate()?;
+
+    {
+        let expected_recipient_token_account_0 = get_associated_token_address_with_program_id(
+            &ctx.accounts.admin_group.fee_keeper,
+            &ctx.accounts.vault_0_mint.key(),
+            ctx.accounts.vault_0_mint.to_account_info().owner,
+        );
+        require_keys_eq!(
+            ctx.accounts.recipient_token_account_0.key(),
+            expected_recipient_token_account_0,
+            ClmmErrorCode::InvalidAccount
+        );
+
+        let expected_recipient_token_account_1 = get_associated_token_address_with_program_id(
+            &ctx.accounts.admin_group.fee_keeper,
+            &ctx.accounts.vault_1_mint.key(),
+            ctx.accounts.vault_1_mint.to_account_info().owner,
+        );
+        require_keys_eq!(
+            ctx.accounts.recipient_token_account_1.key(),
+            expected_recipient_token_account_1,
+            ClmmErrorCode::InvalidAccount
+        );
+    }
 
     let amount_0: u64;
     let amount_1: u64;

@@ -49,17 +49,16 @@ pub fn compute_swap_step(
             swap_step.amount_in = amount_in.unwrap();
         }
 
-        swap_step.sqrt_price_next_x64 =
-            if amount_in.is_some() && amount_remaining_less_fee >= swap_step.amount_in {
-                sqrt_price_target_x64
-            } else {
-                sqrt_price_math::get_next_sqrt_price_from_input(
-                    sqrt_price_current_x64,
-                    liquidity,
-                    amount_remaining_less_fee,
-                    zero_for_one,
-                )
-            };
+        swap_step.sqrt_price_next_x64 = if amount_in.is_some() && amount_remaining_less_fee >= swap_step.amount_in {
+            sqrt_price_target_x64
+        } else {
+            sqrt_price_math::get_next_sqrt_price_from_input(
+                sqrt_price_current_x64,
+                liquidity,
+                amount_remaining_less_fee,
+                zero_for_one,
+            )
+        };
     } else {
         let amount_out = calculate_amount_in_range(
             sqrt_price_current_x64,
@@ -73,17 +72,16 @@ pub fn compute_swap_step(
             swap_step.amount_out = amount_out.unwrap();
         }
         // In exact output case, amount_remaining is negative
-        swap_step.sqrt_price_next_x64 =
-            if amount_out.is_some() && amount_remaining >= swap_step.amount_out {
-                sqrt_price_target_x64
-            } else {
-                sqrt_price_math::get_next_sqrt_price_from_output(
-                    sqrt_price_current_x64,
-                    liquidity,
-                    amount_remaining,
-                    zero_for_one,
-                )
-            }
+        swap_step.sqrt_price_next_x64 = if amount_out.is_some() && amount_remaining >= swap_step.amount_out {
+            sqrt_price_target_x64
+        } else {
+            sqrt_price_math::get_next_sqrt_price_from_output(
+                sqrt_price_current_x64,
+                liquidity,
+                amount_remaining,
+                zero_for_one,
+            )
+        }
     }
 
     // whether we reached the max possible price for the given ticks
@@ -132,23 +130,17 @@ pub fn compute_swap_step(
         swap_step.amount_out = amount_remaining;
     }
 
-    swap_step.fee_amount =
-        if is_base_input && swap_step.sqrt_price_next_x64 != sqrt_price_target_x64 {
-            // we didn't reach the target, so take the remainder of the maximum input as fee
-            // swap dust is granted as fee
-            u64::from(amount_remaining)
-                .checked_sub(swap_step.amount_in)
-                .unwrap()
-        } else {
-            // take pip percentage as fee
-            swap_step
-                .amount_in
-                .mul_div_ceil(
-                    fee_rate.into(),
-                    (FEE_RATE_DENOMINATOR_VALUE - fee_rate).into(),
-                )
-                .unwrap()
-        };
+    swap_step.fee_amount = if is_base_input && swap_step.sqrt_price_next_x64 != sqrt_price_target_x64 {
+        // we didn't reach the target, so take the remainder of the maximum input as fee
+        // swap dust is granted as fee
+        u64::from(amount_remaining).checked_sub(swap_step.amount_in).unwrap()
+    } else {
+        // take pip percentage as fee
+        swap_step
+            .amount_in
+            .mul_div_ceil(fee_rate.into(), (FEE_RATE_DENOMINATOR_VALUE - fee_rate).into())
+            .unwrap()
+    };
 
     Ok(swap_step)
 }
@@ -167,19 +159,9 @@ fn calculate_amount_in_range(
 ) -> Result<Option<u64>> {
     if is_base_input {
         let result = if zero_for_one {
-            liquidity_math::get_delta_amount_0_unsigned(
-                sqrt_price_target_x64,
-                sqrt_price_current_x64,
-                liquidity,
-                true,
-            )
+            liquidity_math::get_delta_amount_0_unsigned(sqrt_price_target_x64, sqrt_price_current_x64, liquidity, true)
         } else {
-            liquidity_math::get_delta_amount_1_unsigned(
-                sqrt_price_current_x64,
-                sqrt_price_target_x64,
-                liquidity,
-                true,
-            )
+            liquidity_math::get_delta_amount_1_unsigned(sqrt_price_current_x64, sqrt_price_target_x64, liquidity, true)
         };
 
         if result.is_ok() {
@@ -193,19 +175,9 @@ fn calculate_amount_in_range(
         }
     } else {
         let result = if zero_for_one {
-            liquidity_math::get_delta_amount_1_unsigned(
-                sqrt_price_target_x64,
-                sqrt_price_current_x64,
-                liquidity,
-                false,
-            )
+            liquidity_math::get_delta_amount_1_unsigned(sqrt_price_target_x64, sqrt_price_current_x64, liquidity, false)
         } else {
-            liquidity_math::get_delta_amount_0_unsigned(
-                sqrt_price_current_x64,
-                sqrt_price_target_x64,
-                liquidity,
-                false,
-            )
+            liquidity_math::get_delta_amount_0_unsigned(sqrt_price_current_x64, sqrt_price_target_x64, liquidity, false)
         };
         if result.is_ok() {
             return Ok(Some(result.unwrap()));
@@ -230,19 +202,9 @@ fn calculate_amount_in_range(
 ) -> Result<Option<u64>> {
     if is_base_input {
         let result = if zero_for_one {
-            liquidity_math::get_delta_amount_0_unsigned(
-                sqrt_price_target_x64,
-                sqrt_price_current_x64,
-                liquidity,
-                true,
-            )
+            liquidity_math::get_delta_amount_0_unsigned(sqrt_price_target_x64, sqrt_price_current_x64, liquidity, true)
         } else {
-            liquidity_math::get_delta_amount_1_unsigned(
-                sqrt_price_current_x64,
-                sqrt_price_target_x64,
-                liquidity,
-                true,
-            )
+            liquidity_math::get_delta_amount_1_unsigned(sqrt_price_current_x64, sqrt_price_target_x64, liquidity, true)
         };
 
         if block_timestamp == 0 {
@@ -263,19 +225,9 @@ fn calculate_amount_in_range(
         }
     } else {
         let result = if zero_for_one {
-            liquidity_math::get_delta_amount_1_unsigned(
-                sqrt_price_target_x64,
-                sqrt_price_current_x64,
-                liquidity,
-                false,
-            )
+            liquidity_math::get_delta_amount_1_unsigned(sqrt_price_target_x64, sqrt_price_current_x64, liquidity, false)
         } else {
-            liquidity_math::get_delta_amount_0_unsigned(
-                sqrt_price_current_x64,
-                sqrt_price_target_x64,
-                liquidity,
-                false,
-            )
+            liquidity_math::get_delta_amount_0_unsigned(sqrt_price_current_x64, sqrt_price_target_x64, liquidity, false)
         };
         if result.is_ok() || block_timestamp == 0 {
             return Ok(Some(result.unwrap()));

@@ -90,8 +90,7 @@ pub fn next_initialized_tick_array_start_index(
         last_tick_array_start_index + TickUtils::tick_count(tick_spacing)
     };
 
-    if next_tick_array_start_index < -tick_boundary || next_tick_array_start_index >= tick_boundary
-    {
+    if next_tick_array_start_index < -tick_boundary || next_tick_array_start_index >= tick_boundary {
         return (false, last_tick_array_start_index);
     }
 
@@ -108,8 +107,7 @@ pub fn next_initialized_tick_array_start_index(
         let offset_bit_map = bit_map << (1024 - bit_pos - 1).try_into().unwrap();
         let next_bit = most_significant_bit(offset_bit_map);
         if next_bit.is_some() {
-            let next_array_start_index =
-                (bit_pos - i32::from(next_bit.unwrap()) - 512) * multiplier;
+            let next_array_start_index = (bit_pos - i32::from(next_bit.unwrap()) - 512) * multiplier;
             (true, next_array_start_index)
         } else {
             // not found til to the end
@@ -121,8 +119,7 @@ pub fn next_initialized_tick_array_start_index(
         let offset_bit_map = bit_map >> (bit_pos).try_into().unwrap();
         let next_bit = least_significant_bit(offset_bit_map);
         if next_bit.is_some() {
-            let next_array_start_index =
-                (bit_pos + i32::from(next_bit.unwrap()) - 512) * multiplier;
+            let next_array_start_index = (bit_pos + i32::from(next_bit.unwrap()) - 512) * multiplier;
             (true, next_array_start_index)
         } else {
             // not found til to the end
@@ -142,29 +139,11 @@ mod test {
     #[test]
     fn test_check_current_tick_array_is_initialized() {
         let tick_spacing = 10;
-        let bit_map = U1024([
-            1,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            u64::max_value() & 1 << 63,
-        ]);
+        let bit_map = U1024([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, u64::max_value() & 1 << 63]);
         let mut tick_current = -307200;
         let mut start_index = -1;
         for _i in 0..1024 {
-            let ret = check_current_tick_array_is_initialized(bit_map, tick_current, tick_spacing)
-                .unwrap();
+            let ret = check_current_tick_array_is_initialized(bit_map, tick_current, tick_spacing).unwrap();
             if ret.0 && ret.1 != start_index {
                 start_index = ret.1;
                 println!("{}-{}", tick_current, start_index);
@@ -178,18 +157,13 @@ mod test {
         let bit_map = U1024::max_value();
         let mut tick_array_start_index = 306600;
         for _i in 0..5 {
-            let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-                bit_map,
-                tick_array_start_index,
-                tick_spacing,
-                true,
-            );
+            let (is_found, array_start_index) =
+                next_initialized_tick_array_start_index(bit_map, tick_array_start_index, tick_spacing, true);
             println!("{:?}", array_start_index);
             if !is_found {
                 break;
             }
-            tick_array_start_index =
-                TickUtils::get_array_start_index(array_start_index, tick_spacing);
+            tick_array_start_index = TickUtils::get_array_start_index(array_start_index, tick_spacing);
         }
     }
     #[test]
@@ -198,18 +172,13 @@ mod test {
         let bit_map = U1024::max_value();
         let mut tick_array_start_index = -307200 + 600 + 600;
         for _i in 0..5 {
-            let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-                bit_map,
-                tick_array_start_index,
-                tick_spacing,
-                true,
-            );
+            let (is_found, array_start_index) =
+                next_initialized_tick_array_start_index(bit_map, tick_array_start_index, tick_spacing, true);
             println!("{:?}", array_start_index);
             if !is_found {
                 break;
             }
-            tick_array_start_index =
-                TickUtils::get_array_start_index(array_start_index, tick_spacing);
+            tick_array_start_index = TickUtils::get_array_start_index(array_start_index, tick_spacing);
         }
     }
     #[test]
@@ -218,18 +187,13 @@ mod test {
         let bit_map = U1024::max_value();
         let mut tick_array_start_index = 1800;
         for _i in 0..5 {
-            let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-                bit_map,
-                tick_array_start_index,
-                tick_spacing,
-                true,
-            );
+            let (is_found, array_start_index) =
+                next_initialized_tick_array_start_index(bit_map, tick_array_start_index, tick_spacing, true);
             println!("{:?}", array_start_index);
             if !is_found {
                 break;
             }
-            tick_array_start_index =
-                TickUtils::get_array_start_index(array_start_index, tick_spacing);
+            tick_array_start_index = TickUtils::get_array_start_index(array_start_index, tick_spacing);
         }
     }
 
@@ -239,18 +203,13 @@ mod test {
         let bit_map = U1024::max_value();
         let mut tick_array_start_index = 306600 - 600 - 600;
         for _i in 0..5 {
-            let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-                bit_map,
-                tick_array_start_index,
-                tick_spacing,
-                false,
-            );
+            let (is_found, array_start_index) =
+                next_initialized_tick_array_start_index(bit_map, tick_array_start_index, tick_spacing, false);
             println!("{:?}", array_start_index);
             if !is_found {
                 break;
             }
-            tick_array_start_index =
-                TickUtils::get_array_start_index(array_start_index, tick_spacing);
+            tick_array_start_index = TickUtils::get_array_start_index(array_start_index, tick_spacing);
         }
     }
     #[test]
@@ -259,18 +218,13 @@ mod test {
         let bit_map = U1024::max_value();
         let mut tick_array_start_index = -307200;
         for _i in 0..5 {
-            let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-                bit_map,
-                tick_array_start_index,
-                tick_spacing,
-                false,
-            );
+            let (is_found, array_start_index) =
+                next_initialized_tick_array_start_index(bit_map, tick_array_start_index, tick_spacing, false);
             println!("{:?}", array_start_index);
             if !is_found {
                 break;
             }
-            tick_array_start_index =
-                TickUtils::get_array_start_index(array_start_index, tick_spacing);
+            tick_array_start_index = TickUtils::get_array_start_index(array_start_index, tick_spacing);
         }
     }
     #[test]
@@ -279,18 +233,13 @@ mod test {
         let bit_map = U1024::max_value();
         let mut tick_array_start_index = -1800;
         for _i in 0..5 {
-            let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-                bit_map,
-                tick_array_start_index,
-                tick_spacing,
-                false,
-            );
+            let (is_found, array_start_index) =
+                next_initialized_tick_array_start_index(bit_map, tick_array_start_index, tick_spacing, false);
             println!("{:?}", array_start_index);
             if !is_found {
                 break;
             }
-            tick_array_start_index =
-                TickUtils::get_array_start_index(array_start_index, tick_spacing);
+            tick_array_start_index = TickUtils::get_array_start_index(array_start_index, tick_spacing);
         }
     }
 
@@ -315,36 +264,26 @@ mod test {
             0,
             9223372036854775808,
         ];
-        let (_, mut array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), 0, tick_spacing, true);
+        let (_, mut array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), 0, tick_spacing, true);
         assert_eq!(array_start_index, -600);
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), -600, tick_spacing, true);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), -600, tick_spacing, true);
         assert_eq!(array_start_index, -1200);
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), -1200, tick_spacing, true);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), -1200, tick_spacing, true);
         assert_eq!(array_start_index, -1800);
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), -1800, tick_spacing, true);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), -1800, tick_spacing, true);
         assert_eq!(array_start_index, -38400);
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), -38400, tick_spacing, true);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), -38400, tick_spacing, true);
         assert_eq!(array_start_index, -39000);
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), -39000, tick_spacing, true);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), -39000, tick_spacing, true);
         assert_eq!(array_start_index, -307200);
 
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), 0, tick_spacing, false);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), 0, tick_spacing, false);
         assert_eq!(array_start_index, 600);
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), 600, tick_spacing, false);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), 600, tick_spacing, false);
         assert_eq!(array_start_index, 1200);
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), 1200, tick_spacing, false);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), 1200, tick_spacing, false);
         assert_eq!(array_start_index, 38400);
-        (_, array_start_index) =
-            next_initialized_tick_array_start_index(U1024(bit_map), 38400, tick_spacing, false);
+        (_, array_start_index) = next_initialized_tick_array_start_index(U1024(bit_map), 38400, tick_spacing, false);
         assert_eq!(array_start_index, 306600);
     }
 
@@ -352,26 +291,17 @@ mod test {
     fn next_initialized_tick_array_start_index_boundary_test() {
         let tick_spacing = 1;
         let bit_map = U1024::max_value();
-        let mut tick_array_start_index = (tick_math::MIN_TICK / TICK_ARRAY_SIZE * tick_spacing - 1)
-            * TICK_ARRAY_SIZE
-            * tick_spacing;
-        let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-            bit_map,
-            tick_array_start_index,
-            tick_spacing as u16,
-            false,
-        );
+        let mut tick_array_start_index =
+            (tick_math::MIN_TICK / TICK_ARRAY_SIZE * tick_spacing - 1) * TICK_ARRAY_SIZE * tick_spacing;
+        let (is_found, array_start_index) =
+            next_initialized_tick_array_start_index(bit_map, tick_array_start_index, tick_spacing as u16, false);
         assert!(is_found == false);
         assert!(array_start_index == tick_array_start_index);
 
         tick_array_start_index =
             (tick_math::MAX_TICK / TICK_ARRAY_SIZE * tick_spacing) * TICK_ARRAY_SIZE * tick_spacing;
-        let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-            bit_map,
-            tick_array_start_index,
-            tick_spacing as u16,
-            true,
-        );
+        let (is_found, array_start_index) =
+            next_initialized_tick_array_start_index(bit_map, tick_array_start_index, tick_spacing as u16, true);
         assert!(is_found == false);
         assert!(array_start_index == tick_array_start_index);
     }
@@ -395,12 +325,8 @@ mod test {
 
             for i in 0..loop_count {
                 expect_index = start_index + i32::from(tick_spacing) * TICK_ARRAY_SIZE;
-                let (is_found, array_start_index) = next_initialized_tick_array_start_index(
-                    bit_map,
-                    start_index,
-                    tick_spacing as u16,
-                    false,
-                );
+                let (is_found, array_start_index) =
+                    next_initialized_tick_array_start_index(bit_map, start_index, tick_spacing as u16, false);
 
                 if i < loop_count - 1 {
                     if is_found == false {
@@ -416,10 +342,7 @@ mod test {
                     } else {
                         assert_eq!(is_found, false);
                         assert_eq!(array_start_index, start_index);
-                        assert_eq!(
-                            array_start_index,
-                            max - i32::from(tick_spacing) * TICK_ARRAY_SIZE
-                        )
+                        assert_eq!(array_start_index, max - i32::from(tick_spacing) * TICK_ARRAY_SIZE)
                     }
                 }
             }

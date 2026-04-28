@@ -99,9 +99,8 @@ impl ObservationState {
                 observation_index + 1
             };
             self.observations[next_observation_index as usize].block_timestamp = block_timestamp;
-            self.observations[next_observation_index as usize].tick_cumulative = last_observation
-                .tick_cumulative
-                .wrapping_add(delta_tick_cumulative);
+            self.observations[next_observation_index as usize].tick_cumulative =
+                last_observation.tick_cumulative.wrapping_add(delta_tick_cumulative);
             self.observation_index = next_observation_index;
         }
     }
@@ -116,10 +115,7 @@ pub fn block_timestamp() -> u32 {
 #[cfg(test)]
 pub fn block_timestamp_mock() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
 }
 
 #[cfg(test)]
@@ -172,21 +168,17 @@ pub mod oracle_layout_test {
         // serialize original data
         let mut observation_state_data = [0u8; ObservationState::LEN];
         let mut offset = 0;
-        observation_state_data[offset..offset + 8]
-            .copy_from_slice(&ObservationState::DISCRIMINATOR);
+        observation_state_data[offset..offset + 8].copy_from_slice(&ObservationState::DISCRIMINATOR);
         offset += 8;
-        observation_state_data[offset..offset + 1]
-            .copy_from_slice(&(initialized as u8).to_le_bytes());
+        observation_state_data[offset..offset + 1].copy_from_slice(&(initialized as u8).to_le_bytes());
         offset += 1;
         observation_state_data[offset..offset + 8].copy_from_slice(&recent_epoch.to_le_bytes());
         offset += 8;
-        observation_state_data[offset..offset + 2]
-            .copy_from_slice(&observation_index.to_le_bytes());
+        observation_state_data[offset..offset + 2].copy_from_slice(&observation_index.to_le_bytes());
         offset += 2;
         observation_state_data[offset..offset + 32].copy_from_slice(&pool_id.to_bytes());
         offset += 32;
-        observation_state_data[offset..offset + Observation::LEN * OBSERVATION_NUM]
-            .copy_from_slice(&observation_datas);
+        observation_state_data[offset..offset + Observation::LEN * OBSERVATION_NUM].copy_from_slice(&observation_datas);
         offset += Observation::LEN * OBSERVATION_NUM;
         observation_state_data[offset..offset + 8].copy_from_slice(&padding[0].to_le_bytes());
         offset += 8;
@@ -204,9 +196,8 @@ pub mod oracle_layout_test {
         );
 
         // deserialize original data
-        let unpack_data: &ObservationState = bytemuck::from_bytes(
-            &observation_state_data[8..core::mem::size_of::<ObservationState>() + 8],
-        );
+        let unpack_data: &ObservationState =
+            bytemuck::from_bytes(&observation_state_data[8..core::mem::size_of::<ObservationState>() + 8]);
 
         // data check
         let unpack_initialized = unpack_data.initialized;
@@ -219,9 +210,7 @@ pub mod oracle_layout_test {
         assert_eq!(unpack_pool_id, pool_id);
         let unpack_padding = unpack_data.padding;
         assert_eq!(unpack_padding, padding);
-        for (observation, unpack_observation) in
-            observations.iter().zip(unpack_data.observations.iter())
-        {
+        for (observation, unpack_observation) in observations.iter().zip(unpack_data.observations.iter()) {
             let block_timestamp = observation.block_timestamp;
             let tick_cumulative = observation.tick_cumulative;
             let padding = observation.padding;

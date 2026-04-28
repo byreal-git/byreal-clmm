@@ -88,9 +88,7 @@ pub enum ErrorCode {
     InvalidRewardInputAccountNumber,
     #[msg("Invalid reward period")]
     InvalidRewardPeriod,
-    #[msg(
-        "Modification of emissiones is allowed within 72 hours from the end of the previous cycle"
-    )]
+    #[msg("Modification of emissiones is allowed within 72 hours from the end of the previous cycle")]
     NotApproveUpdateRewardEmissiones,
     #[msg("uninitialized reward info")]
     UnInitializedRewardInfo,

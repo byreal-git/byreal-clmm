@@ -50,10 +50,7 @@ pub struct UpdateAdminGroupParams {
     pub normal_manager: Option<Pubkey>,
 }
 
-pub fn update_amm_admin_group(
-    ctx: Context<UpdateAdminGroupAccounts>,
-    params: UpdateAdminGroupParams,
-) -> Result<()> {
+pub fn update_amm_admin_group(ctx: Context<UpdateAdminGroupAccounts>, params: UpdateAdminGroupParams) -> Result<()> {
     let admin_group = ctx.accounts.admin_group.deref_mut();
 
     if let Some(fee_keeper) = params.fee_keeper {

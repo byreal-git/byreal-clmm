@@ -29,38 +29,24 @@ pub fn add_delta(x: u128, y: i128) -> Result<u128> {
 
 /// Computes the amount of liquidity received for a given amount of token_0 and price range
 /// Calculates ΔL = Δx (√P_upper x √P_lower)/(√P_upper - √P_lower)
-pub fn get_liquidity_from_amount_0(
-    mut sqrt_ratio_a_x64: u128,
-    mut sqrt_ratio_b_x64: u128,
-    amount_0: u64,
-) -> u128 {
+pub fn get_liquidity_from_amount_0(mut sqrt_ratio_a_x64: u128, mut sqrt_ratio_b_x64: u128, amount_0: u64) -> u128 {
     // sqrt_ratio_a_x64 should hold the smaller value
     if sqrt_ratio_a_x64 > sqrt_ratio_b_x64 {
         std::mem::swap(&mut sqrt_ratio_a_x64, &mut sqrt_ratio_b_x64);
     };
     let intermediate = U128::from(sqrt_ratio_a_x64)
-        .mul_div_floor(
-            U128::from(sqrt_ratio_b_x64),
-            U128::from(fixed_point_64::Q64),
-        )
+        .mul_div_floor(U128::from(sqrt_ratio_b_x64), U128::from(fixed_point_64::Q64))
         .unwrap();
 
     U128::from(amount_0)
-        .mul_div_floor(
-            intermediate,
-            U128::from(sqrt_ratio_b_x64 - sqrt_ratio_a_x64),
-        )
+        .mul_div_floor(intermediate, U128::from(sqrt_ratio_b_x64 - sqrt_ratio_a_x64))
         .unwrap()
         .as_u128()
 }
 
 /// Computes the amount of liquidity received for a given amount of token_1 and price range
 /// Calculates ΔL = Δy / (√P_upper - √P_lower)
-pub fn get_liquidity_from_amount_1(
-    mut sqrt_ratio_a_x64: u128,
-    mut sqrt_ratio_b_x64: u128,
-    amount_1: u64,
-) -> u128 {
+pub fn get_liquidity_from_amount_1(mut sqrt_ratio_a_x64: u128, mut sqrt_ratio_b_x64: u128, amount_1: u64) -> u128 {
     // sqrt_ratio_a_x64 should hold the smaller value
     if sqrt_ratio_a_x64 > sqrt_ratio_b_x64 {
         std::mem::swap(&mut sqrt_ratio_a_x64, &mut sqrt_ratio_b_x64);
@@ -230,11 +216,7 @@ pub fn get_delta_amount_1_unsigned(
 }
 
 /// Helper function to get signed delta amount_0 for given liquidity and price range
-pub fn get_delta_amount_0_signed(
-    sqrt_ratio_a_x64: u128,
-    sqrt_ratio_b_x64: u128,
-    liquidity: i128,
-) -> Result<u64> {
+pub fn get_delta_amount_0_signed(sqrt_ratio_a_x64: u128, sqrt_ratio_b_x64: u128, liquidity: i128) -> Result<u64> {
     if liquidity < 0 {
         get_delta_amount_0_unsigned(
             sqrt_ratio_a_x64,
@@ -253,11 +235,7 @@ pub fn get_delta_amount_0_signed(
 }
 
 /// Helper function to get signed delta amount_1 for given liquidity and price range
-pub fn get_delta_amount_1_signed(
-    sqrt_ratio_a_x64: u128,
-    sqrt_ratio_b_x64: u128,
-    liquidity: i128,
-) -> Result<u64> {
+pub fn get_delta_amount_1_signed(sqrt_ratio_a_x64: u128, sqrt_ratio_b_x64: u128, liquidity: i128) -> Result<u64> {
     if liquidity < 0 {
         get_delta_amount_1_unsigned(
             sqrt_ratio_a_x64,

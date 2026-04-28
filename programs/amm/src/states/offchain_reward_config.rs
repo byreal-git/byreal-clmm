@@ -35,12 +35,7 @@ impl OffchainRewardConfig {
         Self::BASE_LENGTH + self.reward_mint_vec.len() * 32 // 32 for each Pubkey in reward_mint_vec
     }
 
-    pub fn initialize(
-        &mut self,
-        pool_id: Pubkey,
-        reward_vault: Pubkey,
-        vault_bump: u8,
-    ) -> Result<()> {
+    pub fn initialize(&mut self, pool_id: Pubkey, reward_vault: Pubkey, vault_bump: u8) -> Result<()> {
         self.pool_id = pool_id;
         self.reward_vault = reward_vault;
         self.vault_bump = [vault_bump];
@@ -66,11 +61,7 @@ impl OffchainRewardConfig {
         system_program: AccountInfo<'a>,
     ) -> Result<bool> {
         // Sanity checks
-        require_keys_eq!(
-            *reward_config.owner,
-            crate::id(),
-            ErrorCode::IllegalAccountOwner
-        );
+        require_keys_eq!(*reward_config.owner, crate::id(), ErrorCode::IllegalAccountOwner);
 
         let current_account_size = reward_config.data.borrow().len();
         let account_size_to_fit_members = Self::need_len(reward_mint_count);
@@ -89,15 +80,10 @@ impl OffchainRewardConfig {
 
         // If more lamports are needed, transfer them to the account.
         let rent_exempt_lamports = Rent::get().unwrap().minimum_balance(new_size).max(1);
-        let top_up_lamports =
-            rent_exempt_lamports.saturating_sub(reward_config.to_account_info().lamports());
+        let top_up_lamports = rent_exempt_lamports.saturating_sub(reward_config.to_account_info().lamports());
 
         if top_up_lamports > 0 {
-            require_keys_eq!(
-                *system_program.key,
-                system_program::ID,
-                ErrorCode::InvalidAccount
-            );
+            require_keys_eq!(*system_program.key, system_program::ID, ErrorCode::InvalidAccount);
 
             system_program::transfer(
                 CpiContext::new(

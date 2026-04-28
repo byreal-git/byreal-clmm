@@ -42,15 +42,12 @@ pub fn swap_router_base_in<'a, 'b, 'c: 'info, 'info>(
     while !accounts.is_empty() {
         let mut remaining_accounts = accounts.iter();
         let account_info = remaining_accounts.next().unwrap();
-        if accounts.len() != ctx.remaining_accounts.len()
-            && account_info.data_len() != AmmConfig::LEN
-        {
+        if accounts.len() != ctx.remaining_accounts.len() && account_info.data_len() != AmmConfig::LEN {
             accounts = remaining_accounts.as_slice();
             continue;
         }
         let amm_config = Box::new(Account::<AmmConfig>::try_from(account_info)?);
-        let pool_state_loader =
-            AccountLoader::<PoolState>::try_from(remaining_accounts.next().unwrap())?;
+        let pool_state_loader = AccountLoader::<PoolState>::try_from(remaining_accounts.next().unwrap())?;
         let output_token_account = Box::new(InterfaceAccount::<TokenAccount>::try_from(
             &remaining_accounts.next().unwrap(),
         )?);
@@ -60,11 +57,8 @@ pub fn swap_router_base_in<'a, 'b, 'c: 'info, 'info>(
         let output_vault = Box::new(InterfaceAccount::<TokenAccount>::try_from(
             remaining_accounts.next().unwrap(),
         )?);
-        let output_token_mint = Box::new(InterfaceAccount::<Mint>::try_from(
-            remaining_accounts.next().unwrap(),
-        )?);
-        let observation_state =
-            AccountLoader::<ObservationState>::try_from(remaining_accounts.next().unwrap())?;
+        let output_token_mint = Box::new(InterfaceAccount::<Mint>::try_from(remaining_accounts.next().unwrap())?);
+        let observation_state = AccountLoader::<ObservationState>::try_from(remaining_accounts.next().unwrap())?;
 
         {
             let pool_state = pool_state_loader.load()?;

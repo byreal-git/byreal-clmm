@@ -191,16 +191,10 @@ mod tick_math_test {
 
         #[test]
         fn check_get_sqrt_price_at_tick_at_min_or_max_tick() {
-            assert_eq!(
-                get_sqrt_price_at_tick(MIN_TICK).unwrap(),
-                MIN_SQRT_PRICE_X64
-            );
+            assert_eq!(get_sqrt_price_at_tick(MIN_TICK).unwrap(), MIN_SQRT_PRICE_X64);
             let min_sqrt_price = MIN_SQRT_PRICE_X64 as f64 / fixed_point_64::Q64 as f64;
             println!("min_sqrt_price: {}", min_sqrt_price);
-            assert_eq!(
-                get_sqrt_price_at_tick(MAX_TICK).unwrap(),
-                MAX_SQRT_PRICE_X64
-            );
+            assert_eq!(get_sqrt_price_at_tick(MAX_TICK).unwrap(), MAX_SQRT_PRICE_X64);
             let max_sqrt_price = MAX_SQRT_PRICE_X64 as f64 / fixed_point_64::Q64 as f64;
             println!("max_sqrt_price: {}", max_sqrt_price);
         }
@@ -211,16 +205,10 @@ mod tick_math_test {
 
         #[test]
         fn check_get_tick_at_sqrt_price_at_min_or_max_sqrt_price() {
-            assert_eq!(
-                get_tick_at_sqrt_price(MIN_SQRT_PRICE_X64).unwrap(),
-                MIN_TICK,
-            );
+            assert_eq!(get_tick_at_sqrt_price(MIN_SQRT_PRICE_X64).unwrap(), MIN_TICK,);
 
             // we can't reach MAX_SQRT_PRICE_X64
-            assert_eq!(
-                get_tick_at_sqrt_price(MAX_SQRT_PRICE_X64 - 1).unwrap(),
-                MAX_TICK - 1,
-            );
+            assert_eq!(get_tick_at_sqrt_price(MAX_SQRT_PRICE_X64 - 1).unwrap(), MAX_TICK - 1,);
         }
     }
 

@@ -97,29 +97,17 @@ impl InitializeRewardParam {
             return Err(ErrorCode::InvalidRewardInitParam.into());
         }
         let time_delta = self.end_time.checked_sub(self.open_time).unwrap();
-        if time_delta < reward_period_limit::MIN_REWARD_PERIOD
-            || time_delta > reward_period_limit::MAX_REWARD_PERIOD
-        {
+        if time_delta < reward_period_limit::MIN_REWARD_PERIOD || time_delta > reward_period_limit::MAX_REWARD_PERIOD {
             return Err(ErrorCode::InvalidRewardPeriod.into());
         }
         Ok(())
     }
 }
 
-pub fn initialize_reward(
-    ctx: Context<InitializeReward>,
-    param: InitializeRewardParam,
-) -> Result<()> {
-    let mint_associated_is_initialized = util::support_mint_associated_is_initialized(
-        &ctx.remaining_accounts,
-        &ctx.accounts.reward_token_mint,
-    )?;
-    if !util::is_supported_mint(
-        &ctx.accounts.reward_token_mint,
-        mint_associated_is_initialized,
-    )
-    .unwrap()
-    {
+pub fn initialize_reward(ctx: Context<InitializeReward>, param: InitializeRewardParam) -> Result<()> {
+    let mint_associated_is_initialized =
+        util::support_mint_associated_is_initialized(&ctx.remaining_accounts, &ctx.accounts.reward_token_mint)?;
+    if !util::is_supported_mint(&ctx.accounts.reward_token_mint, mint_associated_is_initialized).unwrap() {
         return err!(ErrorCode::NotSupportMint);
     }
     let operation_state = ctx.accounts.operation_state.load()?;
@@ -143,9 +131,7 @@ pub fn initialize_reward(
         )
         .unwrap()
         .as_u64();
-    let transfer_fee =
-        util::get_transfer_inverse_fee(ctx.accounts.reward_token_mint.clone(), reward_amount)
-            .unwrap();
+    let transfer_fee = util::get_transfer_inverse_fee(ctx.accounts.reward_token_mint.clone(), reward_amount).unwrap();
     let reward_amount_with_transfer_fee = reward_amount.checked_add(transfer_fee).unwrap();
     require_gte!(
         ctx.accounts.funder_token_account.amount,

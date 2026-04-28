@@ -2,8 +2,7 @@ use crate::error::ErrorCode;
 use crate::libraries::{
     big_num::U512,
     tick_array_bit_map::{
-        get_bitmap_tick_boundary, max_tick_in_tickarray_bitmap, TickArryBitmap,
-        TICK_ARRAY_BITMAP_SIZE,
+        get_bitmap_tick_boundary, max_tick_in_tickarray_bitmap, TickArryBitmap, TICK_ARRAY_BITMAP_SIZE,
     },
     tick_math,
 };
@@ -96,8 +95,7 @@ impl TickArrayBitmapExtension {
     ) -> Result<(bool, i32)> {
         let (_, tickarray_bitmap) = self.get_bitmap(tick_array_start_index, tick_spacing)?;
 
-        let tick_array_offset_in_bitmap =
-            Self::tick_array_offset_in_bitmap(tick_array_start_index, tick_spacing);
+        let tick_array_offset_in_bitmap = Self::tick_array_offset_in_bitmap(tick_array_start_index, tick_spacing);
 
         if U512(tickarray_bitmap).bit(tick_array_offset_in_bitmap as usize) {
             return Ok((true, tick_array_start_index));
@@ -106,14 +104,9 @@ impl TickArrayBitmapExtension {
     }
 
     /// Flip the value of tick in the bitmap.
-    pub fn flip_tick_array_bit(
-        &mut self,
-        tick_array_start_index: i32,
-        tick_spacing: u16,
-    ) -> Result<()> {
+    pub fn flip_tick_array_bit(&mut self, tick_array_start_index: i32, tick_spacing: u16) -> Result<()> {
         let (offset, tick_array_bitmap) = self.get_bitmap(tick_array_start_index, tick_spacing)?;
-        let tick_array_offset_in_bitmap =
-            Self::tick_array_offset_in_bitmap(tick_array_start_index, tick_spacing);
+        let tick_array_offset_in_bitmap = Self::tick_array_offset_in_bitmap(tick_array_start_index, tick_spacing);
         let tick_array_bitmap = U512(tick_array_bitmap);
         let mask = U512::one() << tick_array_offset_in_bitmap;
         if tick_array_start_index < 0 {
@@ -138,10 +131,8 @@ impl TickArrayBitmapExtension {
         } else {
             last_tick_array_start_index + multiplier
         };
-        let min_tick_array_start_index =
-            TickUtils::get_array_start_index(tick_math::MIN_TICK, tick_spacing);
-        let max_tick_array_start_index =
-            TickUtils::get_array_start_index(tick_math::MAX_TICK, tick_spacing);
+        let min_tick_array_start_index = TickUtils::get_array_start_index(tick_math::MIN_TICK, tick_spacing);
+        let max_tick_array_start_index = TickUtils::get_array_start_index(tick_math::MAX_TICK, tick_spacing);
 
         if next_tick_array_start_index < min_tick_array_start_index
             || next_tick_array_start_index > max_tick_array_start_index
@@ -168,13 +159,11 @@ impl TickArrayBitmapExtension {
         let (bitmap_min_tick_boundary, bitmap_max_tick_boundary) =
             get_bitmap_tick_boundary(next_tick_array_start_index, tick_spacing);
 
-        let tick_array_offset_in_bitmap =
-            Self::tick_array_offset_in_bitmap(next_tick_array_start_index, tick_spacing);
+        let tick_array_offset_in_bitmap = Self::tick_array_offset_in_bitmap(next_tick_array_start_index, tick_spacing);
         if zero_for_one {
             // tick from upper to lower
             // find from highter bits to lower bits
-            let offset_bit_map = U512(tickarray_bitmap)
-                << (TICK_ARRAY_BITMAP_SIZE - 1 - tick_array_offset_in_bitmap);
+            let offset_bit_map = U512(tickarray_bitmap) << (TICK_ARRAY_BITMAP_SIZE - 1 - tick_array_offset_in_bitmap);
 
             let next_bit = if offset_bit_map.is_zero() {
                 None
@@ -183,8 +172,8 @@ impl TickArrayBitmapExtension {
             };
 
             if next_bit.is_some() {
-                let next_array_start_index = next_tick_array_start_index
-                    - i32::from(next_bit.unwrap()) * TickUtils::tick_count(tick_spacing);
+                let next_array_start_index =
+                    next_tick_array_start_index - i32::from(next_bit.unwrap()) * TickUtils::tick_count(tick_spacing);
                 return (true, next_array_start_index);
             } else {
                 // not found til to the end
@@ -201,15 +190,12 @@ impl TickArrayBitmapExtension {
                 Some(u16::try_from(offset_bit_map.trailing_zeros()).unwrap())
             };
             if next_bit.is_some() {
-                let next_array_start_index = next_tick_array_start_index
-                    + i32::from(next_bit.unwrap()) * TickUtils::tick_count(tick_spacing);
+                let next_array_start_index =
+                    next_tick_array_start_index + i32::from(next_bit.unwrap()) * TickUtils::tick_count(tick_spacing);
                 return (true, next_array_start_index);
             } else {
                 // not found til to the end
-                return (
-                    false,
-                    bitmap_max_tick_boundary - TickUtils::tick_count(tick_spacing),
-                );
+                return (false, bitmap_max_tick_boundary - TickUtils::tick_count(tick_spacing));
             }
         }
     }
@@ -260,9 +246,7 @@ pub mod tick_array_bitmap_extension_test {
         }
     }
 
-    pub fn build_tick_array_bitmap_extension_info<'info>(
-        param: &mut BuildExtensionAccountInfo,
-    ) -> AccountInfo<'_> {
+    pub fn build_tick_array_bitmap_extension_info<'info>(param: &mut BuildExtensionAccountInfo) -> AccountInfo<'_> {
         let disc_bytes = [60, 150, 36, 219, 97, 128, 139, 153];
         for i in 0..8 {
             param.data[i] = disc_bytes[i];
@@ -283,77 +267,47 @@ pub mod tick_array_bitmap_extension_test {
     fn get_bitmap_offset_test() {
         let tick_spacing = 1;
         let tick_spacing_u16: u16 = 1;
-        let mut offset = TickArrayBitmapExtension::get_bitmap_offset(
-            tick_spacing * TICK_ARRAY_SIZE * 512,
-            tick_spacing_u16,
-        )
-        .unwrap();
+        let mut offset =
+            TickArrayBitmapExtension::get_bitmap_offset(tick_spacing * TICK_ARRAY_SIZE * 512, tick_spacing_u16)
+                .unwrap();
         assert!(offset == 0);
 
-        offset = TickArrayBitmapExtension::get_bitmap_offset(
-            tick_spacing * TICK_ARRAY_SIZE * 513,
-            tick_spacing_u16,
-        )
-        .unwrap();
+        offset = TickArrayBitmapExtension::get_bitmap_offset(tick_spacing * TICK_ARRAY_SIZE * 513, tick_spacing_u16)
+            .unwrap();
         assert!(offset == 0);
 
-        offset = TickArrayBitmapExtension::get_bitmap_offset(
-            tick_spacing * TICK_ARRAY_SIZE * 1024,
-            tick_spacing_u16,
-        )
-        .unwrap();
+        offset = TickArrayBitmapExtension::get_bitmap_offset(tick_spacing * TICK_ARRAY_SIZE * 1024, tick_spacing_u16)
+            .unwrap();
         assert!(offset == 1);
 
-        offset = TickArrayBitmapExtension::get_bitmap_offset(
-            tick_spacing * TICK_ARRAY_SIZE * 7393,
-            tick_spacing_u16,
-        )
-        .unwrap();
+        offset = TickArrayBitmapExtension::get_bitmap_offset(tick_spacing * TICK_ARRAY_SIZE * 7393, tick_spacing_u16)
+            .unwrap();
         assert!(offset == 13);
 
-        let mut result = TickArrayBitmapExtension::get_bitmap_offset(
-            tick_spacing * TICK_ARRAY_SIZE * 7394,
-            tick_spacing_u16,
-        );
+        let mut result =
+            TickArrayBitmapExtension::get_bitmap_offset(tick_spacing * TICK_ARRAY_SIZE * 7394, tick_spacing_u16);
         assert!(result.is_err());
 
-        result = TickArrayBitmapExtension::get_bitmap_offset(
-            -tick_spacing * TICK_ARRAY_SIZE * 512,
-            tick_spacing_u16,
-        );
+        result = TickArrayBitmapExtension::get_bitmap_offset(-tick_spacing * TICK_ARRAY_SIZE * 512, tick_spacing_u16);
         assert!(result.is_err());
 
-        let mut offset = TickArrayBitmapExtension::get_bitmap_offset(
-            -tick_spacing * TICK_ARRAY_SIZE * 513,
-            tick_spacing_u16,
-        )
-        .unwrap();
+        let mut offset =
+            TickArrayBitmapExtension::get_bitmap_offset(-tick_spacing * TICK_ARRAY_SIZE * 513, tick_spacing_u16)
+                .unwrap();
         assert!(offset == 0);
 
-        offset = TickArrayBitmapExtension::get_bitmap_offset(
-            -tick_spacing * TICK_ARRAY_SIZE * 1024,
-            tick_spacing_u16,
-        )
-        .unwrap();
+        offset = TickArrayBitmapExtension::get_bitmap_offset(-tick_spacing * TICK_ARRAY_SIZE * 1024, tick_spacing_u16)
+            .unwrap();
         assert!(offset == 0);
 
-        offset = TickArrayBitmapExtension::get_bitmap_offset(
-            -tick_spacing * TICK_ARRAY_SIZE * 1025,
-            tick_spacing_u16,
-        )
-        .unwrap();
+        offset = TickArrayBitmapExtension::get_bitmap_offset(-tick_spacing * TICK_ARRAY_SIZE * 1025, tick_spacing_u16)
+            .unwrap();
         assert!(offset == 1);
 
-        offset = TickArrayBitmapExtension::get_bitmap_offset(
-            -tick_spacing * TICK_ARRAY_SIZE * 7394,
-            tick_spacing_u16,
-        )
-        .unwrap();
+        offset = TickArrayBitmapExtension::get_bitmap_offset(-tick_spacing * TICK_ARRAY_SIZE * 7394, tick_spacing_u16)
+            .unwrap();
         assert!(offset == 13);
-        result = TickArrayBitmapExtension::get_bitmap_offset(
-            -tick_spacing * TICK_ARRAY_SIZE * 7395,
-            tick_spacing_u16,
-        );
+        result = TickArrayBitmapExtension::get_bitmap_offset(-tick_spacing * TICK_ARRAY_SIZE * 7395, tick_spacing_u16);
         assert!(result.is_err());
     }
 
@@ -622,8 +576,7 @@ pub mod tick_array_bitmap_extension_test {
             let tick_boundary = max_tick_in_tickarray_bitmap(tick_spacing);
             let mut start_index = tick_boundary;
             let mut expect_index;
-            let loop_count = (TickUtils::get_array_start_index(MAX_TICK, tick_spacing)
-                - start_index)
+            let loop_count = (TickUtils::get_array_start_index(MAX_TICK, tick_spacing) - start_index)
                 / (i32::from(tick_spacing) * TICK_ARRAY_SIZE);
             for _i in 0..loop_count {
                 expect_index = start_index + i32::from(tick_spacing) * TICK_ARRAY_SIZE;
@@ -661,8 +614,7 @@ pub mod tick_array_bitmap_extension_test {
         // serialize original data
         let mut bitmap_extension_data = [0u8; 8 + 32 + 64 * EXTENSION_TICKARRAY_BITMAP_SIZE * 2];
         let mut offset = 0;
-        bitmap_extension_data[offset..offset + 8]
-            .copy_from_slice(&TickArrayBitmapExtension::DISCRIMINATOR);
+        bitmap_extension_data[offset..offset + 8].copy_from_slice(&TickArrayBitmapExtension::DISCRIMINATOR);
         offset += 8;
         bitmap_extension_data[offset..offset + 32].copy_from_slice(&pool_id.to_bytes());
         offset += 32;
@@ -693,28 +645,19 @@ pub mod tick_array_bitmap_extension_test {
         );
 
         // deserialize original data
-        let unpack_data: &TickArrayBitmapExtension = bytemuck::from_bytes(
-            &bitmap_extension_data[8..core::mem::size_of::<TickArrayBitmapExtension>() + 8],
-        );
+        let unpack_data: &TickArrayBitmapExtension =
+            bytemuck::from_bytes(&bitmap_extension_data[8..core::mem::size_of::<TickArrayBitmapExtension>() + 8]);
 
         // data check
         let unpack_pool_id = unpack_data.pool_id;
         assert_eq!(unpack_pool_id, pool_id);
         for i in 0..EXTENSION_TICKARRAY_BITMAP_SIZE {
             for j in 0..8 {
-                let unpack_positive_tick_array_bitmap =
-                    unpack_data.positive_tick_array_bitmap[i][j];
-                assert_eq!(
-                    unpack_positive_tick_array_bitmap,
-                    positive_tick_array_bitmap[i][j]
-                );
+                let unpack_positive_tick_array_bitmap = unpack_data.positive_tick_array_bitmap[i][j];
+                assert_eq!(unpack_positive_tick_array_bitmap, positive_tick_array_bitmap[i][j]);
 
-                let unpack_negative_tick_array_bitmap =
-                    unpack_data.negative_tick_array_bitmap[i][j];
-                assert_eq!(
-                    unpack_negative_tick_array_bitmap,
-                    negative_tick_array_bitmap[i][j]
-                );
+                let unpack_negative_tick_array_bitmap = unpack_data.negative_tick_array_bitmap[i][j];
+                assert_eq!(unpack_negative_tick_array_bitmap, negative_tick_array_bitmap[i][j]);
             }
         }
     }

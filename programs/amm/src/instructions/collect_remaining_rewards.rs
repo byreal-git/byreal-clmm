@@ -47,10 +47,7 @@ pub struct CollectRemainingRewards<'info> {
     pub memo_program: Program<'info, Memo>,
 }
 
-pub fn collect_remaining_rewards(
-    ctx: Context<CollectRemainingRewards>,
-    reward_index: u8,
-) -> Result<()> {
+pub fn collect_remaining_rewards(ctx: Context<CollectRemainingRewards>, reward_index: u8) -> Result<()> {
     // invoke_memo_instruction(
     //     COLLECT_REMAINING_MEMO_MSG,
     //     ctx.accounts.memo_program.to_account_info(),
@@ -63,11 +60,8 @@ pub fn collect_remaining_rewards(
         return err!(ErrorCode::NotApproved);
     }
 
-    let amount_remaining = get_remaining_reward_amount(
-        &ctx.accounts.pool_state,
-        &ctx.accounts.reward_token_vault,
-        reward_index,
-    )?;
+    let amount_remaining =
+        get_remaining_reward_amount(&ctx.accounts.pool_state, &ctx.accounts.reward_token_vault, reward_index)?;
 
     transfer_from_pool_vault_to_user(
         &ctx.accounts.pool_state,

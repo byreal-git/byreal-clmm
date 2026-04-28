@@ -13,3 +13,7 @@ Makefile
 sdk/node_modules
 sdk/tools
 programs/amm/proptest-regressions
+build_log.txt
+
+programs/amm/bin
+programs/amm/pkg

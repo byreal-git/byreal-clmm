@@ -60,12 +60,7 @@ impl DynTickArrayState {
         Self::HEADER_LEN + self.alloc_tick_count as usize * TickState::LEN
     }
 
-    pub fn initialize(
-        &mut self,
-        start_index: i32,
-        tick_spacing: u16,
-        pool_key: Pubkey,
-    ) -> Result<()> {
+    pub fn initialize(&mut self, start_index: i32, tick_spacing: u16, pool_key: Pubkey) -> Result<()> {
         TickUtils::check_is_valid_start_index(start_index, tick_spacing);
         self.start_tick_index = start_index;
         self.pool_id = pool_key;
@@ -83,16 +78,9 @@ impl DynTickArrayState {
             ClmmErrorCode::InvalidTickIndex
         );
 
-        let offset = TickUtils::get_tick_offset_in_tick_array(
-            self.start_tick_index,
-            tick_index,
-            tick_spacing,
-        )?;
+        let offset = TickUtils::get_tick_offset_in_tick_array(self.start_tick_index, tick_index, tick_spacing)?;
 
-        require!(
-            self.tick_offset_index[offset] == 0,
-            ClmmErrorCode::InvalidTickIndex
-        );
+        require!(self.tick_offset_index[offset] == 0, ClmmErrorCode::InvalidTickIndex);
 
         self.alloc_tick_count += 1;
         self.tick_offset_index[offset] = self.alloc_tick_count;
@@ -112,11 +100,7 @@ impl DynTickArrayState {
             ClmmErrorCode::InvalidTickIndex
         );
 
-        let offset = TickUtils::get_tick_offset_in_tick_array(
-            self.start_tick_index,
-            tick_index,
-            tick_spacing,
-        )?;
+        let offset = TickUtils::get_tick_offset_in_tick_array(self.start_tick_index, tick_index, tick_spacing)?;
 
         let tick_state_index = self.tick_offset_index[offset];
         require!(tick_state_index > 0, ClmmErrorCode::InvalidTickIndex);
@@ -131,20 +115,16 @@ impl DynTickArrayState {
         tick_spacing: u16,
         zero_for_one: bool,
     ) -> Result<Option<u8>> {
-        let current_tick_array_start_index =
-            TickUtils::get_array_start_index(current_tick_index, tick_spacing);
+        let current_tick_array_start_index = TickUtils::get_array_start_index(current_tick_index, tick_spacing);
         if current_tick_array_start_index != self.start_tick_index {
             return Ok(None);
         }
-        let mut offset_in_array =
-            (current_tick_index - self.start_tick_index) / i32::from(tick_spacing);
+        let mut offset_in_array = (current_tick_index - self.start_tick_index) / i32::from(tick_spacing);
 
         if zero_for_one {
             while offset_in_array >= 0 {
                 if self.tick_offset_index[offset_in_array as usize] > 0
-                    && tick_state_slice
-                        [self.tick_offset_index[offset_in_array as usize] as usize - 1]
-                        .is_initialized()
+                    && tick_state_slice[self.tick_offset_index[offset_in_array as usize] as usize - 1].is_initialized()
                 {
                     return Ok(Some(self.tick_offset_index[offset_in_array as usize] - 1));
                 }
@@ -154,9 +134,7 @@ impl DynTickArrayState {
             offset_in_array = offset_in_array + 1;
             while offset_in_array < TICK_ARRAY_SIZE {
                 if self.tick_offset_index[offset_in_array as usize] > 0
-                    && tick_state_slice
-                        [self.tick_offset_index[offset_in_array as usize] as usize - 1]
-                        .is_initialized()
+                    && tick_state_slice[self.tick_offset_index[offset_in_array as usize] as usize - 1].is_initialized()
                 {
                     return Ok(Some(self.tick_offset_index[offset_in_array as usize] - 1));
                 }
@@ -167,17 +145,12 @@ impl DynTickArrayState {
     }
 
     /// Base on swap directioin, return the first initialized tick(tick-index in dyn-tick-array) in the tick array.
-    pub fn first_initialized_tick_index(
-        &self,
-        tick_state_slice: &[TickState],
-        zero_for_one: bool,
-    ) -> Result<u8> {
+    pub fn first_initialized_tick_index(&self, tick_state_slice: &[TickState], zero_for_one: bool) -> Result<u8> {
         if zero_for_one {
             let mut i = TICK_ARRAY_SIZE - 1;
             while i >= 0 {
                 if self.tick_offset_index[i as usize] > 0
-                    && tick_state_slice[self.tick_offset_index[i as usize] as usize - 1]
-                        .is_initialized()
+                    && tick_state_slice[self.tick_offset_index[i as usize] as usize - 1].is_initialized()
                 {
                     return Ok(self.tick_offset_index[i as usize] - 1);
                 }
@@ -224,8 +197,7 @@ impl<'info> DynTickArrayLoader<'info> {
     #[inline(never)]
     pub fn try_from(acc_info: &AccountInfo<'info>) -> Result<Self> {
         if acc_info.owner != &crate::id() {
-            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram)
-                .with_pubkeys((*acc_info.owner, crate::id())));
+            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, crate::id())));
         }
         let data: &[u8] = &acc_info.try_borrow_data()?;
         if data.len() < DynTickArrayState::DISCRIMINATOR.len() {
@@ -244,8 +216,7 @@ impl<'info> DynTickArrayLoader<'info> {
     #[inline(never)]
     pub fn try_from_unchecked(acc_info: &AccountInfo<'info>) -> Result<Self> {
         if acc_info.owner != &crate::id() {
-            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram)
-                .with_pubkeys((*acc_info.owner, crate::id())));
+            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, crate::id())));
         }
         Ok(Self::new(acc_info.clone()))
     }
@@ -255,9 +226,7 @@ impl<'info> DynTickArrayLoader<'info> {
 impl<'info> DynTickArrayLoader<'info> {
     /// Returns a `RefMut` to the account data structure for reading or writing.
     /// Should only be called once, when the account is being initialized.
-    pub fn load_init<'a>(
-        &'a self,
-    ) -> Result<(RefMut<'a, DynTickArrayState>, RefMut<'a, [TickState]>)> {
+    pub fn load_init<'a>(&'a self) -> Result<(RefMut<'a, DynTickArrayState>, RefMut<'a, [TickState]>)> {
         // AccountInfo api allows you to borrow mut even if the account isn't
         // writable, so add this check for a better dev experience.
         if !self.acc_info.is_writable {
@@ -283,15 +252,13 @@ impl<'info> DynTickArrayLoader<'info> {
         }
 
         let (header, ticks) = RefMut::map_split(data, |data_slice| {
-            let (header_bytes, ticks_bytes) =
-                data_slice.split_at_mut(DynTickArrayState::HEADER_LEN);
+            let (header_bytes, ticks_bytes) = data_slice.split_at_mut(DynTickArrayState::HEADER_LEN);
 
             // 将字节切片转换为对应的可变结构体引用
-            let header: &mut DynTickArrayState =
-                bytemuck::from_bytes_mut(header_bytes[8..].as_mut());
+            let header: &mut DynTickArrayState = bytemuck::from_bytes_mut(header_bytes[8..].as_mut());
 
-            let ticks: &mut [TickState] = bytemuck::try_cast_slice_mut(ticks_bytes)
-                .expect("Failed to cast ticks_bytes to TickState slice");
+            let ticks: &mut [TickState] =
+                bytemuck::try_cast_slice_mut(ticks_bytes).expect("Failed to cast ticks_bytes to TickState slice");
 
             (header, ticks)
         });
@@ -327,15 +294,13 @@ impl<'info> DynTickArrayLoader<'info> {
         }
 
         let (header, ticks) = RefMut::map_split(data, |data_slice| {
-            let (header_bytes, ticks_bytes) =
-                data_slice.split_at_mut(DynTickArrayState::HEADER_LEN);
+            let (header_bytes, ticks_bytes) = data_slice.split_at_mut(DynTickArrayState::HEADER_LEN);
 
             // 将字节切片转换为对应的可变结构体引用
-            let header: &mut DynTickArrayState =
-                bytemuck::from_bytes_mut(header_bytes[8..].as_mut());
+            let header: &mut DynTickArrayState = bytemuck::from_bytes_mut(header_bytes[8..].as_mut());
 
-            let ticks: &mut [TickState] = bytemuck::try_cast_slice_mut(ticks_bytes)
-                .expect("Failed to cast ticks_bytes to TickState slice");
+            let ticks: &mut [TickState] =
+                bytemuck::try_cast_slice_mut(ticks_bytes).expect("Failed to cast ticks_bytes to TickState slice");
 
             (header, ticks)
         });
@@ -372,8 +337,8 @@ impl<'info> DynTickArrayLoader<'info> {
             // 将字节切片转换为对应的可变结构体引用
             let header: &DynTickArrayState = bytemuck::from_bytes(header_bytes[8..].as_ref());
 
-            let ticks: &[TickState] = bytemuck::try_cast_slice(ticks_bytes)
-                .expect("Failed to cast ticks_bytes to TickState slice");
+            let ticks: &[TickState] =
+                bytemuck::try_cast_slice(ticks_bytes).expect("Failed to cast ticks_bytes to TickState slice");
 
             (header, ticks)
         });
@@ -451,9 +416,7 @@ pub mod dyn_tick_array_test {
             new_tick.tick = start_index + (offset * tick_spacing as usize) as i32;
 
             // 使用了 1 个 tick
-            dyn_tick_header
-                .use_one_tick(new_tick.tick, tick_spacing)
-                .unwrap();
+            dyn_tick_header.use_one_tick(new_tick.tick, tick_spacing).unwrap();
 
             dyn_tick_states.push(new_tick);
         }
@@ -469,9 +432,7 @@ pub mod dyn_tick_array_test {
         tick_states: Vec<TickState>,
     ) -> (RefCell<DynTickArrayState>, RefCell<Vec<TickState>>) {
         let mut dyn_tick_header = DynTickArrayState::default();
-        dyn_tick_header
-            .initialize(start_index, tick_spacing, pool_id)
-            .unwrap();
+        dyn_tick_header.initialize(start_index, tick_spacing, pool_id).unwrap();
 
         let mut dyn_tick_states = vec![];
 
@@ -509,9 +470,7 @@ pub mod dyn_tick_array_test {
         for tick_state in sorted_tick_states {
             assert!(tick_state.tick != 0);
 
-            dyn_tick_header
-                .use_one_tick(tick_state.tick, tick_spacing)
-                .unwrap();
+            dyn_tick_header.use_one_tick(tick_state.tick, tick_spacing).unwrap();
             dyn_tick_states.push(tick_state);
         }
 
@@ -557,33 +516,17 @@ pub mod dyn_tick_array_test {
             assert_eq!(TickUtils::get_array_start_index(-600, 10), -600);
             assert_eq!(TickUtils::get_array_start_index(-30720, 1), -30720);
             assert_eq!(TickUtils::get_array_start_index(30720, 1), 30720);
-            assert_eq!(
-                TickUtils::get_array_start_index(tick_math::MIN_TICK, 1),
-                -443640
-            );
-            assert_eq!(
-                TickUtils::get_array_start_index(tick_math::MAX_TICK, 1),
-                443580
-            );
-            assert_eq!(
-                TickUtils::get_array_start_index(tick_math::MAX_TICK, 60),
-                442800
-            );
-            assert_eq!(
-                TickUtils::get_array_start_index(tick_math::MIN_TICK, 60),
-                -446400
-            );
+            assert_eq!(TickUtils::get_array_start_index(tick_math::MIN_TICK, 1), -443640);
+            assert_eq!(TickUtils::get_array_start_index(tick_math::MAX_TICK, 1), 443580);
+            assert_eq!(TickUtils::get_array_start_index(tick_math::MAX_TICK, 60), 442800);
+            assert_eq!(TickUtils::get_array_start_index(tick_math::MIN_TICK, 60), -446400);
         }
 
         #[test]
         fn next_tick_arrary_start_index_test() {
             let tick_spacing = 15;
-            let (dyn_tick_header, _) = build_dyn_tick_array(
-                -1800,
-                tick_spacing,
-                DynamicTickArrayBuildType::FromEndIndex,
-                vec![],
-            );
+            let (dyn_tick_header, _) =
+                build_dyn_tick_array(-1800, tick_spacing, DynamicTickArrayBuildType::FromEndIndex, vec![]);
             // zero_for_one, next tickarray start_index < current
             assert_eq!(
                 -2700,
@@ -604,12 +547,8 @@ pub mod dyn_tick_array_test {
         fn get_tick_index_in_array_test() {
             let tick_spacing = 4;
             // tick range [960, 1196]
-            let (dyn_tick_header, _) = build_dyn_tick_array(
-                960,
-                tick_spacing,
-                DynamicTickArrayBuildType::FromStartIndex,
-                vec![],
-            );
+            let (dyn_tick_header, _) =
+                build_dyn_tick_array(960, tick_spacing, DynamicTickArrayBuildType::FromStartIndex, vec![]);
 
             // not in tickarray
             assert_eq!(
@@ -621,14 +560,8 @@ pub mod dyn_tick_array_test {
             );
 
             // first index is tickarray start tick
-            let array_index = dyn_tick_header
-                .borrow_mut()
-                .use_one_tick(960, tick_spacing)
-                .unwrap();
-            assert_eq!(
-                dyn_tick_header.borrow().tick_offset_index[0],
-                array_index + 1
-            );
+            let array_index = dyn_tick_header.borrow_mut().use_one_tick(960, tick_spacing).unwrap();
+            assert_eq!(dyn_tick_header.borrow().tick_offset_index[0], array_index + 1);
             assert_eq!(
                 dyn_tick_header
                     .borrow()
@@ -638,14 +571,8 @@ pub mod dyn_tick_array_test {
             );
 
             // tick_index % tick_spacing != 0
-            let array_index = dyn_tick_header
-                .borrow_mut()
-                .use_one_tick(1105, tick_spacing)
-                .unwrap();
-            assert_eq!(
-                dyn_tick_header.borrow().tick_offset_index[36],
-                array_index + 1
-            );
+            let array_index = dyn_tick_header.borrow_mut().use_one_tick(1105, tick_spacing).unwrap();
+            assert_eq!(dyn_tick_header.borrow().tick_offset_index[36], array_index + 1);
             assert_eq!(
                 dyn_tick_header
                     .borrow()
@@ -655,14 +582,8 @@ pub mod dyn_tick_array_test {
             );
 
             // (1108-960) / tick_spacing
-            let array_index = dyn_tick_header
-                .borrow_mut()
-                .use_one_tick(1108, tick_spacing)
-                .unwrap();
-            assert_eq!(
-                dyn_tick_header.borrow().tick_offset_index[37],
-                array_index + 1
-            );
+            let array_index = dyn_tick_header.borrow_mut().use_one_tick(1108, tick_spacing).unwrap();
+            assert_eq!(dyn_tick_header.borrow().tick_offset_index[37], array_index + 1);
             assert_eq!(
                 dyn_tick_header
                     .borrow()
@@ -672,14 +593,8 @@ pub mod dyn_tick_array_test {
             );
 
             // the end index of tickarray
-            let array_index = dyn_tick_header
-                .borrow_mut()
-                .use_one_tick(1196, tick_spacing)
-                .unwrap();
-            assert_eq!(
-                dyn_tick_header.borrow().tick_offset_index[59],
-                array_index + 1
-            );
+            let array_index = dyn_tick_header.borrow_mut().use_one_tick(1196, tick_spacing).unwrap();
+            assert_eq!(dyn_tick_header.borrow().tick_offset_index[59], array_index + 1);
 
             assert_eq!(
                 dyn_tick_header
@@ -724,12 +639,8 @@ pub mod dyn_tick_array_test {
         #[test]
         fn next_initialized_tick_when_tick_is_positive() {
             // init tick_index [0,30,105]
-            let (dyn_tick_header, dyn_tick_state) = build_dyn_tick_array(
-                0,
-                15,
-                DynamicTickArrayBuildType::FromStartIndex,
-                vec![0, 2, 7],
-            );
+            let (dyn_tick_header, dyn_tick_state) =
+                build_dyn_tick_array(0, 15, DynamicTickArrayBuildType::FromStartIndex, vec![0, 2, 7]);
             let tick_array = dyn_tick_state.borrow_mut();
 
             // test zero_for_one
@@ -823,12 +734,8 @@ pub mod dyn_tick_array_test {
         #[test]
         fn next_initialized_tick_when_tick_is_negative() {
             // init tick_index [-900,-870,-795]
-            let (dyn_tick_header, dyn_tick_state) = build_dyn_tick_array(
-                -900,
-                15,
-                DynamicTickArrayBuildType::FromEndIndex,
-                vec![0, 2, 7],
-            );
+            let (dyn_tick_header, dyn_tick_state) =
+                build_dyn_tick_array(-900, 15, DynamicTickArrayBuildType::FromEndIndex, vec![0, 2, 7]);
             let tick_array = dyn_tick_state.borrow_mut();
 
             // test zero for one
@@ -936,14 +843,13 @@ pub mod dyn_tick_array_test {
         ) -> (u128, u128) {
             let mut fee_growth_global_0_x64 = init_fee_growth_global_0_x64;
             let mut fee_growth_global_1_x64 = init_fee_growth_global_1_x64;
-            let (fee_growth_inside_0_before, fee_growth_inside_1_before) =
-                TickUtils::get_fee_growth_inside(
-                    tick_lower,
-                    tick_upper,
-                    tick_current,
-                    fee_growth_global_0_x64,
-                    fee_growth_global_1_x64,
-                );
+            let (fee_growth_inside_0_before, fee_growth_inside_1_before) = TickUtils::get_fee_growth_inside(
+                tick_lower,
+                tick_upper,
+                tick_current,
+                fee_growth_global_0_x64,
+                fee_growth_global_1_x64,
+            );
 
             if fee_growth_global_0_x64 != 0 {
                 fee_growth_global_0_x64 = fee_growth_global_0_x64 + fee_growth_global_delta;
@@ -966,14 +872,13 @@ pub mod dyn_tick_array_test {
             }
 
             tick_current = target_tick_current;
-            let (fee_growth_inside_0_after, fee_growth_inside_1_after) =
-                TickUtils::get_fee_growth_inside(
-                    tick_lower,
-                    tick_upper,
-                    tick_current,
-                    fee_growth_global_0_x64,
-                    fee_growth_global_1_x64,
-                );
+            let (fee_growth_inside_0_after, fee_growth_inside_1_after) = TickUtils::get_fee_growth_inside(
+                tick_lower,
+                tick_upper,
+                tick_current,
+                fee_growth_global_0_x64,
+                fee_growth_global_1_x64,
+            );
 
             println!(
                 "inside_delta_0:{},fee_growth_inside_0_after:{},fee_growth_inside_0_before:{}",
@@ -998,62 +903,58 @@ pub mod dyn_tick_array_test {
             // one_for_zero, price move to right and token_1 fee growth
 
             // tick_lower and tick_upper all new create, and tick_lower initialize with fee_growth_global_1_x64(1000)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    0,
-                    1000,
-                    500,
-                    0,
-                    11,
-                    build_tick_with_fee_reward_growth(-10, 0, 1000, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
-                    false,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                0,
+                1000,
+                500,
+                0,
+                11,
+                build_tick_with_fee_reward_growth(-10, 0, 1000, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
+                false,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 500);
 
             // tick_lower is initialized with fee_growth_outside_1_x64(100) and tick_upper is new create.
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    0,
-                    1000,
-                    500,
-                    0,
-                    11,
-                    build_tick_with_fee_reward_growth(-10, 0, 100, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
-                    false,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                0,
+                1000,
+                500,
+                0,
+                11,
+                build_tick_with_fee_reward_growth(-10, 0, 100, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
+                false,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 500);
 
             // tick_lower is new create with fee_growth_global_1_x64(1000)  and tick_upper is initialized with fee_growth_outside_1_x64(100)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    0,
-                    1000,
-                    500,
-                    0,
-                    11,
-                    build_tick_with_fee_reward_growth(-10, 0, 1000, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 100, 0).get_mut(),
-                    false,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                0,
+                1000,
+                500,
+                0,
+                11,
+                build_tick_with_fee_reward_growth(-10, 0, 1000, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 100, 0).get_mut(),
+                false,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 500);
 
             // tick_lower is initialized with fee_growth_outside_1_x64(50)  and tick_upper is initialized with fee_growth_outside_1_x64(100)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    0,
-                    1000,
-                    500,
-                    0,
-                    11,
-                    build_tick_with_fee_reward_growth(-10, 0, 50, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 100, 0).get_mut(),
-                    false,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                0,
+                1000,
+                500,
+                0,
+                11,
+                build_tick_with_fee_reward_growth(-10, 0, 50, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 100, 0).get_mut(),
+                false,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 500);
         }
@@ -1063,62 +964,58 @@ pub mod dyn_tick_array_test {
             // zero_for_one, price move to left and token_0 fee growth
 
             // tick_lower and tick_upper all new create, and tick_lower initialize with fee_growth_global_0_x64(1000)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    1000,
-                    0,
-                    500,
-                    0,
-                    -11,
-                    build_tick_with_fee_reward_growth(-10, 1000, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
-                    true,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                1000,
+                0,
+                500,
+                0,
+                -11,
+                build_tick_with_fee_reward_growth(-10, 1000, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
+                true,
+            );
             assert_eq!(fee_growth_inside_delta_0, 500);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is initialized with fee_growth_outside_0_x64(100) and tick_upper is new create.
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    1000,
-                    0,
-                    500,
-                    0,
-                    -11,
-                    build_tick_with_fee_reward_growth(-10, 100, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
-                    true,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                1000,
+                0,
+                500,
+                0,
+                -11,
+                build_tick_with_fee_reward_growth(-10, 100, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
+                true,
+            );
             assert_eq!(fee_growth_inside_delta_0, 500);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is new create with fee_growth_global_0_x64(1000)  and tick_upper is initialized with fee_growth_outside_0_x64(100)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    1000,
-                    0,
-                    500,
-                    0,
-                    -11,
-                    build_tick_with_fee_reward_growth(-10, 1000, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 100, 0, 0).get_mut(),
-                    true,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                1000,
+                0,
+                500,
+                0,
+                -11,
+                build_tick_with_fee_reward_growth(-10, 1000, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 100, 0, 0).get_mut(),
+                true,
+            );
             assert_eq!(fee_growth_inside_delta_0, 500);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is initialized with fee_growth_outside_0_x64(50)  and tick_upper is initialized with fee_growth_outside_0_x64(100)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    1000,
-                    0,
-                    500,
-                    0,
-                    -11,
-                    build_tick_with_fee_reward_growth(-10, 50, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 100, 0, 0).get_mut(),
-                    true,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                1000,
+                0,
+                500,
+                0,
+                -11,
+                build_tick_with_fee_reward_growth(-10, 50, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 100, 0, 0).get_mut(),
+                true,
+            );
             assert_eq!(fee_growth_inside_delta_0, 500);
             assert_eq!(fee_growth_inside_delta_1, 0);
         }
@@ -1128,62 +1025,58 @@ pub mod dyn_tick_array_test {
             // one_for_zero, price move to right and token_1 fee growth
 
             // tick_lower and tick_upper all new create
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    0,
-                    1000,
-                    500,
-                    -11,
-                    0,
-                    build_tick_with_fee_reward_growth(-10, 0, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
-                    true,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                0,
+                1000,
+                500,
+                -11,
+                0,
+                build_tick_with_fee_reward_growth(-10, 0, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
+                true,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is initialized with fee_growth_outside_1_x64(100) and tick_upper is new create.
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    0,
-                    1000,
-                    500,
-                    -11,
-                    0,
-                    build_tick_with_fee_reward_growth(-10, 0, 100, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
-                    true,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                0,
+                1000,
+                500,
+                -11,
+                0,
+                build_tick_with_fee_reward_growth(-10, 0, 100, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 0, 0).get_mut(),
+                true,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is new create  and tick_upper is initialized with fee_growth_outside_1_x64(100)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    0,
-                    1000,
-                    500,
-                    -11,
-                    0,
-                    build_tick_with_fee_reward_growth(-10, 0, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 100, 0).get_mut(),
-                    true,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                0,
+                1000,
+                500,
+                -11,
+                0,
+                build_tick_with_fee_reward_growth(-10, 0, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 100, 0).get_mut(),
+                true,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is initialized with fee_growth_outside_1_x64(50)  and tick_upper is initialized with fee_growth_outside_1_x64(100)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    0,
-                    1000,
-                    500,
-                    -11,
-                    0,
-                    build_tick_with_fee_reward_growth(-10, 0, 50, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 0, 100, 0).get_mut(),
-                    true,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                0,
+                1000,
+                500,
+                -11,
+                0,
+                build_tick_with_fee_reward_growth(-10, 0, 50, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 0, 100, 0).get_mut(),
+                true,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 0);
         }
@@ -1193,62 +1086,58 @@ pub mod dyn_tick_array_test {
             // zero_for_one, price move to left and token_0 fee growth
 
             // tick_lower and tick_upper all new create
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    1000,
-                    0,
-                    500,
-                    11,
-                    0,
-                    build_tick_with_fee_reward_growth(-10, 1000, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 1000, 0, 0).get_mut(),
-                    false,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                1000,
+                0,
+                500,
+                11,
+                0,
+                build_tick_with_fee_reward_growth(-10, 1000, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 1000, 0, 0).get_mut(),
+                false,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is initialized with fee_growth_outside_0_x64(100) and tick_upper is new create.
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    1000,
-                    0,
-                    500,
-                    11,
-                    0,
-                    build_tick_with_fee_reward_growth(-10, 100, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 1000, 0, 0).get_mut(),
-                    false,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                1000,
+                0,
+                500,
+                11,
+                0,
+                build_tick_with_fee_reward_growth(-10, 100, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 1000, 0, 0).get_mut(),
+                false,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is new create with fee_growth_global_0_x64(1000)  and tick_upper is initialized with fee_growth_outside_0_x64(100)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    1000,
-                    0,
-                    500,
-                    11,
-                    0,
-                    build_tick_with_fee_reward_growth(-10, 1000, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 100, 0, 0).get_mut(),
-                    false,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                1000,
+                0,
+                500,
+                11,
+                0,
+                build_tick_with_fee_reward_growth(-10, 1000, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 100, 0, 0).get_mut(),
+                false,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 0);
 
             // tick_lower is initialized with fee_growth_outside_0_x64(50)  and tick_upper is initialized with fee_growth_outside_0_x64(100)
-            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) =
-                fee_growth_inside_delta_when_price_move(
-                    1000,
-                    0,
-                    500,
-                    11,
-                    0,
-                    build_tick_with_fee_reward_growth(-10, 50, 0, 0).get_mut(),
-                    build_tick_with_fee_reward_growth(10, 100, 0, 0).get_mut(),
-                    false,
-                );
+            let (fee_growth_inside_delta_0, fee_growth_inside_delta_1) = fee_growth_inside_delta_when_price_move(
+                1000,
+                0,
+                500,
+                11,
+                0,
+                build_tick_with_fee_reward_growth(-10, 50, 0, 0).get_mut(),
+                build_tick_with_fee_reward_growth(10, 100, 0, 0).get_mut(),
+                false,
+            );
             assert_eq!(fee_growth_inside_delta_0, 0);
             assert_eq!(fee_growth_inside_delta_1, 0);
         }
@@ -1329,12 +1218,8 @@ pub mod dyn_tick_array_test {
             };
 
             let reward_infos = &[RewardInfo::default(); 3];
-            let reward_inside = TickUtils::get_reward_growths_inside(
-                tick_lower,
-                tick_upper,
-                tick_current,
-                reward_infos,
-            );
+            let reward_inside =
+                TickUtils::get_reward_growths_inside(tick_lower, tick_upper, tick_current, reward_infos);
             assert_eq!(reward_inside, [0; 3]);
         }
 
@@ -1474,8 +1359,7 @@ pub mod dyn_tick_array_test {
             let mut offset = 0;
             for i in 0..13 {
                 tick_padding[i] = u32::MAX - 3 * i as u32;
-                tick_padding_data[offset..offset + 4]
-                    .copy_from_slice(&tick_padding[i].to_le_bytes());
+                tick_padding_data[offset..offset + 4].copy_from_slice(&tick_padding[i].to_le_bytes());
                 offset += 4;
             }
 
@@ -1494,20 +1378,17 @@ pub mod dyn_tick_array_test {
                 [0u8; DynTickArrayState::HEADER_LEN + (TICK_ARRAY_SIZE as usize) * TickState::LEN];
 
             // write discriminator
-            dyn_tick_array_full_account_data[..8]
-                .copy_from_slice(&DynTickArrayState::DISCRIMINATOR);
+            dyn_tick_array_full_account_data[..8].copy_from_slice(&DynTickArrayState::DISCRIMINATOR);
 
             let data = RefCell::new(&mut dyn_tick_array_full_account_data[..]);
 
             // 首次进行反序列化，并对header做初始化, 添加1个tick-state数据
             {
                 let (mut header, mut ticks) = RefMut::map_split(data.borrow_mut(), |data_slice| {
-                    let (header_bytes, ticks_bytes) =
-                        data_slice.split_at_mut(DynTickArrayState::HEADER_LEN);
+                    let (header_bytes, ticks_bytes) = data_slice.split_at_mut(DynTickArrayState::HEADER_LEN);
 
                     // 将字节切片转换为对应的可变结构体引用
-                    let header: &mut DynTickArrayState =
-                        bytemuck::from_bytes_mut(header_bytes[8..].as_mut());
+                    let header: &mut DynTickArrayState = bytemuck::from_bytes_mut(header_bytes[8..].as_mut());
 
                     let ticks: &mut [TickState] = bytemuck::try_cast_slice_mut(ticks_bytes)
                         .expect("Failed to cast ticks_bytes to TickState slice");
@@ -1515,9 +1396,7 @@ pub mod dyn_tick_array_test {
                     (header, ticks)
                 });
 
-                header
-                    .initialize(start_tick_index, tick_spacing, pool_id)
-                    .unwrap();
+                header.initialize(start_tick_index, tick_spacing, pool_id).unwrap();
                 assert!(header.alloc_tick_count == 0);
 
                 let _ = header.use_one_tick(use_tick_index, tick_spacing);
@@ -1527,12 +1406,10 @@ pub mod dyn_tick_array_test {
             // 再对数据进行反序列化，应该已经有1个tick-state数据了
             {
                 let (header, ticks) = RefMut::map_split(data.borrow_mut(), |data_slice| {
-                    let (header_bytes, ticks_bytes) =
-                        data_slice.split_at_mut(DynTickArrayState::HEADER_LEN);
+                    let (header_bytes, ticks_bytes) = data_slice.split_at_mut(DynTickArrayState::HEADER_LEN);
 
                     // 将字节切片转换为对应的可变结构体引用
-                    let header: &mut DynTickArrayState =
-                        bytemuck::from_bytes_mut(header_bytes[8..].as_mut());
+                    let header: &mut DynTickArrayState = bytemuck::from_bytes_mut(header_bytes[8..].as_mut());
 
                     let ticks: &mut [TickState] = bytemuck::try_cast_slice_mut(ticks_bytes)
                         .expect("Failed to cast ticks_bytes to TickState slice");

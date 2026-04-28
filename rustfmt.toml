@@ -1,0 +1,11 @@
+# Maximum width of each line
+max_width = 120
+
+# Indentation width
+tab_spaces = 4
+
+# Reorder imports alphabetically
+reorder_imports = true
+
+# Use spaces instead of tabs
+hard_tabs = false

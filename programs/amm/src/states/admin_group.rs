@@ -39,26 +39,11 @@ impl AmmAdminGroup {
 
     pub fn validate(&self) -> Result<()> {
         require!(self.fee_keeper != Pubkey::default(), ErrorCode::NotApproved);
-        require!(
-            self.reward_config_manager != Pubkey::default(),
-            ErrorCode::NotApproved
-        );
-        require!(
-            self.reward_claim_manager != Pubkey::default(),
-            ErrorCode::NotApproved
-        );
-        require!(
-            self.pool_manager != Pubkey::default(),
-            ErrorCode::NotApproved
-        );
-        require!(
-            self.emergency_manager != Pubkey::default(),
-            ErrorCode::NotApproved
-        );
-        require!(
-            self.normal_manager != Pubkey::default(),
-            ErrorCode::NotApproved
-        );
+        require!(self.reward_config_manager != Pubkey::default(), ErrorCode::NotApproved);
+        require!(self.reward_claim_manager != Pubkey::default(), ErrorCode::NotApproved);
+        require!(self.pool_manager != Pubkey::default(), ErrorCode::NotApproved);
+        require!(self.emergency_manager != Pubkey::default(), ErrorCode::NotApproved);
+        require!(self.normal_manager != Pubkey::default(), ErrorCode::NotApproved);
 
         Ok(())
     }

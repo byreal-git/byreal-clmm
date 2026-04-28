@@ -279,10 +279,8 @@ pub fn open_position<'a, 'b, 'c: 'info, 'info>(
             pool_state.tick_spacing,
         )?;
 
-        let use_tickarray_bitmap_extension = pool_state.is_overflow_default_tickarray_bitmap(vec![
-            tick_array_lower_start_index,
-            tick_array_upper_start_index,
-        ]);
+        let use_tickarray_bitmap_extension = pool_state
+            .is_overflow_default_tickarray_bitmap(vec![tick_array_lower_start_index, tick_array_upper_start_index]);
 
         let LiquidityChangeResult {
             amount_0,
@@ -293,35 +291,40 @@ pub fn open_position<'a, 'b, 'c: 'info, 'info>(
             fee_growth_inside_1_x64,
             reward_growths_inside,
             ..
-        } = add_liquidity(
-            payer,
-            token_account_0,
-            token_account_1,
-            token_vault_0,
-            token_vault_1,
-            &tick_array_lower_loader,
-            &tick_array_upper_loader,
-            token_program_2022,
-            token_program,
-            vault_0_mint,
-            vault_1_mint,
-            if use_tickarray_bitmap_extension {
-                require_keys_eq!(
-                    remaining_accounts[0].key(),
-                    TickArrayBitmapExtension::key(pool_state_loader.key())
-                );
-                Some(&remaining_accounts[0])
-            } else {
-                None
-            },
-            pool_state,
-            &mut liquidity,
-            amount_0_max,
-            amount_1_max,
-            tick_lower_index,
-            tick_upper_index,
-            base_flag,
-        )?;
+        } = if liquidity > 0 || amount_0_max > 0 || amount_1_max > 0 {
+            // add_liquidity is only invoked when the user is supplying liquidity at open time.
+            add_liquidity(
+                payer,
+                token_account_0,
+                token_account_1,
+                token_vault_0,
+                token_vault_1,
+                &tick_array_lower_loader,
+                &tick_array_upper_loader,
+                token_program_2022,
+                token_program,
+                vault_0_mint,
+                vault_1_mint,
+                if use_tickarray_bitmap_extension {
+                    require_keys_eq!(
+                        remaining_accounts[0].key(),
+                        TickArrayBitmapExtension::key(pool_state_loader.key())
+                    );
+                    Some(&remaining_accounts[0])
+                } else {
+                    None
+                },
+                pool_state,
+                &mut liquidity,
+                amount_0_max,
+                amount_1_max,
+                tick_lower_index,
+                tick_upper_index,
+                base_flag,
+            )?
+        } else {
+            LiquidityChangeResult::default()
+        };
 
         personal_position.initialize(
             personal_position_bump,
@@ -380,7 +383,12 @@ pub struct LiquidityChangeResult {
     pub reward_growths_inside: [u128; 3],
 }
 
-/// Add liquidity to an initialized pool
+/// Add liquidity to an initialized pool.
+/// Whenever this function is called, real liquidity must be supplied.
+/// If `liquidity` is 0, the actual liquidity to add is derived from `amount_0_max` or `amount_1_max`.
+/// If `liquidity` is greater than 0, the caller has already computed the liquidity value, and it is used directly.
+/// `base_flag`: even when `Some(x)` is passed in, it is ignored; liquidity is always computed from `amount_0_max`
+/// and `amount_1_max`.
 pub fn add_liquidity<'b, 'c: 'info, 'info>(
     payer: &'b Signer<'info>,
     token_account_0: &'b AccountInfo<'info>,
@@ -400,50 +408,61 @@ pub fn add_liquidity<'b, 'c: 'info, 'info>(
     amount_1_max: u64,
     tick_lower_index: i32,
     tick_upper_index: i32,
-    base_flag: Option<bool>,
+    _base_flag: Option<bool>,
 ) -> Result<LiquidityChangeResult> {
     if *liquidity == 0 {
-        if base_flag.is_none() {
-            // when establishing a new position , liquidity allows for further additions
-            return Ok(LiquidityChangeResult::default());
-        }
-        if base_flag.unwrap() {
+        // Liquidity derived from amount_0_max
+        let liquidity_by_amount_0 = if amount_0_max > 0 {
             // must deduct transfer fee before calculate liquidity
             // because only v2 instruction support token_2022, vault_0_mint must be exist
-            let amount_0_transfer_fee =
-                get_transfer_fee(vault_0_mint.clone().unwrap(), amount_0_max).unwrap();
-            *liquidity = liquidity_math::get_liquidity_from_single_amount_0(
+            let amount_0_transfer_fee = get_transfer_fee(vault_0_mint.clone().unwrap(), amount_0_max).unwrap();
+            liquidity_math::get_liquidity_from_single_amount_0(
                 pool_state.sqrt_price_x64,
                 tick_math::get_sqrt_price_at_tick(tick_lower_index)?,
                 tick_math::get_sqrt_price_at_tick(tick_upper_index)?,
                 amount_0_max.checked_sub(amount_0_transfer_fee).unwrap(),
-            );
-            #[cfg(feature = "enable-log")]
-            msg!(
-                "liquidity: {}, amount_0_max:{}, amount_0_transfer_fee:{}",
-                *liquidity,
-                amount_0_max,
-                amount_0_transfer_fee
-            );
+            )
         } else {
+            0
+        };
+
+        let liquidity_by_amount_1 = if amount_1_max > 0 {
             // must deduct transfer fee before calculate liquidity
             // because only v2 instruction support token_2022, vault_1_mint must be exist
-            let amount_1_transfer_fee =
-                get_transfer_fee(vault_1_mint.clone().unwrap(), amount_1_max).unwrap();
-            *liquidity = liquidity_math::get_liquidity_from_single_amount_1(
+            let amount_1_transfer_fee = get_transfer_fee(vault_1_mint.clone().unwrap(), amount_1_max).unwrap();
+            liquidity_math::get_liquidity_from_single_amount_1(
                 pool_state.sqrt_price_x64,
                 tick_math::get_sqrt_price_at_tick(tick_lower_index)?,
                 tick_math::get_sqrt_price_at_tick(tick_upper_index)?,
                 amount_1_max.checked_sub(amount_1_transfer_fee).unwrap(),
-            );
-            #[cfg(feature = "enable-log")]
-            msg!(
-                "liquidity: {}, amount_1_max:{}, amount_1_transfer_fee:{}",
-                *liquidity,
-                amount_1_max,
-                amount_1_transfer_fee
-            );
+            )
+        } else {
+            0
+        };
+
+        // Handle single-sided vs double-sided liquidity supply.
+        // Single-sided: one side is 0 and the other is > 0; take the liquidity computed from the non-zero side.
+        // Double-sided: both sides are > 0; take the minimum of the two computed liquidity values.
+        require!(
+            liquidity_by_amount_0 > 0 || liquidity_by_amount_1 > 0,
+            ErrorCode::ForbidBothZeroForSupplyLiquidity
+        );
+
+        if liquidity_by_amount_0 == 0 {
+            *liquidity = liquidity_by_amount_1;
+        } else if liquidity_by_amount_1 == 0 {
+            *liquidity = liquidity_by_amount_0;
+        } else {
+            *liquidity = std::cmp::min(liquidity_by_amount_0, liquidity_by_amount_1);
         }
+
+        #[cfg(feature = "enable-log")]
+        msg!(
+            "liquidity: {}, liquidity_by_amount_0: {}, liquidity_by_amount_1: {}",
+            *liquidity,
+            liquidity_by_amount_0,
+            liquidity_by_amount_1
+        );
     }
     assert!(*liquidity > 0);
     let liquidity_before = pool_state.liquidity;
@@ -529,13 +548,11 @@ pub fn add_liquidity<'b, 'c: 'info, 'info>(
     let mut amount_0_transfer_fee = 0;
     let mut amount_1_transfer_fee = 0;
     if vault_0_mint.is_some() {
-        amount_0_transfer_fee =
-            get_transfer_inverse_fee(vault_0_mint.clone().unwrap(), amount_0).unwrap();
+        amount_0_transfer_fee = get_transfer_inverse_fee(vault_0_mint.clone().unwrap(), amount_0).unwrap();
         result.amount_0_transfer_fee = amount_0_transfer_fee;
     };
     if vault_1_mint.is_some() {
-        amount_1_transfer_fee =
-            get_transfer_inverse_fee(vault_1_mint.clone().unwrap(), amount_1).unwrap();
+        amount_1_transfer_fee = get_transfer_inverse_fee(vault_1_mint.clone().unwrap(), amount_1).unwrap();
         result.amount_1_transfer_fee = amount_1_transfer_fee;
     }
     emit!(LiquidityCalculateEvent {
@@ -676,11 +693,8 @@ pub fn modify_position(
             tick_upper_state.tick,
             liquidity_delta,
         )?;
-        if pool_state.tick_current >= tick_lower_state.tick
-            && pool_state.tick_current < tick_upper_state.tick
-        {
-            pool_state.liquidity =
-                liquidity_math::add_delta(pool_state.liquidity, liquidity_delta)?;
+        if pool_state.tick_current >= tick_lower_state.tick && pool_state.tick_current < tick_upper_state.tick {
+            pool_state.liquidity = liquidity_math::add_delta(pool_state.liquidity, liquidity_delta)?;
         }
     }
 
@@ -859,10 +873,8 @@ pub fn initialize_token_metadata_extension<'info>(
     };
 
     let mint_data = position_nft_mint.try_borrow_data()?;
-    let mint_state_unpacked =
-        StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
-    let new_account_len =
-        mint_state_unpacked.try_get_new_account_len_for_variable_len_extension(&metadata)?;
+    let mint_state_unpacked = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+    let new_account_len = mint_state_unpacked.try_get_new_account_len_for_variable_len_extension(&metadata)?;
     let new_rent_exempt_lamports = Rent::get()?.minimum_balance(new_account_len);
     let additional_lamports = new_rent_exempt_lamports.saturating_sub(position_nft_mint.lamports());
     // CPI call will borrow the account data

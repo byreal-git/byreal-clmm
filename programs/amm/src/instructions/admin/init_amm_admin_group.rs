@@ -54,10 +54,7 @@ pub struct InitAdminGroupParams {
     pub normal_manager: Pubkey,
 }
 
-pub fn init_amm_admin_group(
-    ctx: Context<InitAdminGroupAccounts>,
-    params: InitAdminGroupParams,
-) -> Result<()> {
+pub fn init_amm_admin_group(ctx: Context<InitAdminGroupAccounts>, params: InitAdminGroupParams) -> Result<()> {
     let admin_group = ctx.accounts.admin_group.deref_mut();
 
     admin_group.fee_keeper = params.fee_keeper;

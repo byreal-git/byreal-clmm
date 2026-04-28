@@ -54,8 +54,7 @@ impl OperationState {
         // clear
         self.operation_owners = [Pubkey::default(); OPERATION_SIZE_USIZE];
         // update
-        self.operation_owners[0..operation_owners.len()]
-            .copy_from_slice(operation_owners.as_slice());
+        self.operation_owners[0..operation_owners.len()].copy_from_slice(operation_owners.as_slice());
     }
 
     pub fn update_whitelist_mint(&mut self, keys: Vec<Pubkey>) {
@@ -102,10 +101,7 @@ mod test {
 
         operation_state.update_operation_owner(keys.clone());
         println!("{:?}", operation_state.operation_owners);
-        assert_eq!(
-            &keys.clone()[..],
-            &operation_state.operation_owners[..keys.len()]
-        );
+        assert_eq!(&keys.clone()[..], &operation_state.operation_owners[..keys.len()]);
     }
 
     #[test]
@@ -168,10 +164,7 @@ mod test {
 
         operation_state.update_operation_owner(keys.clone());
         println!("{:?}", operation_state.operation_owners);
-        assert_eq!(
-            &keys.clone()[..],
-            &operation_state.operation_owners[..keys.len()]
-        );
+        assert_eq!(&keys.clone()[..], &operation_state.operation_owners[..keys.len()]);
     }
 
     #[test]
@@ -218,14 +211,11 @@ mod test {
         use anchor_lang::Discriminator;
 
         let bump: u8 = 0x12;
-        let operation_owners: [Pubkey; OPERATION_SIZE_USIZE] =
-            std::array::from_fn(|_| Pubkey::new_unique());
-        let whitelist_mints: [Pubkey; WHITE_MINT_SIZE_USIZE] =
-            std::array::from_fn(|_| Pubkey::new_unique());
+        let operation_owners: [Pubkey; OPERATION_SIZE_USIZE] = std::array::from_fn(|_| Pubkey::new_unique());
+        let whitelist_mints: [Pubkey; WHITE_MINT_SIZE_USIZE] = std::array::from_fn(|_| Pubkey::new_unique());
 
         // serialize original data
-        let mut operation_data =
-            [0u8; 8 + 1 + 32 * OPERATION_SIZE_USIZE + 32 * WHITE_MINT_SIZE_USIZE];
+        let mut operation_data = [0u8; 8 + 1 + 32 * OPERATION_SIZE_USIZE + 32 * WHITE_MINT_SIZE_USIZE];
         let mut offset = 0;
         operation_data[offset..offset + 8].copy_from_slice(&OperationState::DISCRIMINATOR);
         offset += 8;
@@ -242,10 +232,7 @@ mod test {
 
         // len check
         assert_eq!(offset, operation_data.len());
-        assert_eq!(
-            operation_data.len(),
-            core::mem::size_of::<OperationState>() + 8
-        );
+        assert_eq!(operation_data.len(), core::mem::size_of::<OperationState>() + 8);
 
         // deserialize original data
         let unpack_data: &OperationState =

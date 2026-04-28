@@ -47,10 +47,7 @@ pub mod byreal_clmm {
     use super::*;
 
     /// Initialize the AMM admin group account, which is used to manage the AMM protocol.
-    pub fn init_amm_admin_group(
-        ctx: Context<InitAdminGroupAccounts>,
-        params: InitAdminGroupParams,
-    ) -> Result<()> {
+    pub fn init_amm_admin_group(ctx: Context<InitAdminGroupAccounts>, params: InitAdminGroupParams) -> Result<()> {
         instructions::init_amm_admin_group(ctx, params)
     }
 
@@ -123,11 +120,7 @@ pub mod byreal_clmm {
     /// * `ctx`- The context of accounts
     /// * `sqrt_price_x64` - the initial sqrt price (amount_token_1 / amount_token_0) of the pool as a Q64.64
     /// Note: The open_time must be smaller than the current block_timestamp on chain.
-    pub fn create_pool(
-        ctx: Context<CreatePool>,
-        sqrt_price_x64: u128,
-        open_time: u64,
-    ) -> Result<()> {
+    pub fn create_pool(ctx: Context<CreatePool>, sqrt_price_x64: u128, open_time: u64) -> Result<()> {
         instructions::create_pool(ctx, sqrt_price_x64, open_time)
     }
 
@@ -136,10 +129,7 @@ pub mod byreal_clmm {
     ///
     /// * `ctx`- The context of accounts
     /// * `params` - The parameters for creating the pool with decay fee
-    pub fn create_pool_decay_fee(
-        ctx: Context<CreatePool>,
-        params: CreatePoolDecayFeeParams,
-    ) -> Result<()> {
+    pub fn create_pool_decay_fee(ctx: Context<CreatePool>, params: CreatePoolDecayFeeParams) -> Result<()> {
         instructions::create_pool_decay_fee(ctx, params)
     }
 
@@ -175,11 +165,7 @@ pub mod byreal_clmm {
     ///           update whitelist mint when the `param` is 2
     ///           remove whitelist mint when the `param` is 3
     ///
-    pub fn update_operation_account(
-        ctx: Context<UpdateOperationAccount>,
-        param: u8,
-        keys: Vec<Pubkey>,
-    ) -> Result<()> {
+    pub fn update_operation_account(ctx: Context<UpdateOperationAccount>, param: u8, keys: Vec<Pubkey>) -> Result<()> {
         instructions::update_operation_account(ctx, param, keys)
     }
 
@@ -207,10 +193,7 @@ pub mod byreal_clmm {
     /// * `end_time` - reward end timestamp
     /// * `emissions_per_second_x64` - Token reward per second are earned per unit of liquidity.
     ///
-    pub fn initialize_reward(
-        ctx: Context<InitializeReward>,
-        param: InitializeRewardParam,
-    ) -> Result<()> {
+    pub fn initialize_reward(ctx: Context<InitializeReward>, param: InitializeRewardParam) -> Result<()> {
         instructions::initialize_reward(ctx, param)
     }
 
@@ -221,10 +204,7 @@ pub mod byreal_clmm {
     /// * `ctx`- The context of accounts
     /// * `reward_index` - the index to reward info
     ///
-    pub fn collect_remaining_rewards(
-        ctx: Context<CollectRemainingRewards>,
-        reward_index: u8,
-    ) -> Result<()> {
+    pub fn collect_remaining_rewards(ctx: Context<CollectRemainingRewards>, reward_index: u8) -> Result<()> {
         instructions::collect_remaining_rewards(ctx, reward_index)
     }
 
@@ -258,36 +238,21 @@ pub mod byreal_clmm {
         open_time: u64,
         end_time: u64,
     ) -> Result<()> {
-        instructions::set_reward_params(
-            ctx,
-            reward_index,
-            emissions_per_second_x64,
-            open_time,
-            end_time,
-        )
+        instructions::set_reward_params(ctx, reward_index, emissions_per_second_x64, open_time, end_time)
     }
 
     /// deposit offchain reward into the pool
-    pub fn deposit_offchain_reward(
-        ctx: Context<DepositOffchainRewardAccounts>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn deposit_offchain_reward(ctx: Context<DepositOffchainRewardAccounts>, amount: u64) -> Result<()> {
         instructions::deposit_offchain_reward(ctx, amount)
     }
 
     /// claim offchain reward from the pool
-    pub fn claim_offchain_reward(
-        ctx: Context<ClaimOffchainRewardAccounts>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn claim_offchain_reward(ctx: Context<ClaimOffchainRewardAccounts>, amount: u64) -> Result<()> {
         instructions::claim_offchain_reward(ctx, amount)
     }
 
     /// withdraw offchain reward from the pool
-    pub fn withdraw_offchain_reward(
-        ctx: Context<WithdrawOffchainRewardAccounts>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn withdraw_offchain_reward(ctx: Context<WithdrawOffchainRewardAccounts>, amount: u64) -> Result<()> {
         instructions::withdraw_offchain_reward(ctx, amount)
     }
 
@@ -450,9 +415,7 @@ pub mod byreal_clmm {
     ///
     /// * `ctx` - The context of accounts
     ///
-    pub fn close_position<'a, 'b, 'c, 'info>(
-        ctx: Context<'a, 'b, 'c, 'info, ClosePosition<'info>>,
-    ) -> Result<()> {
+    pub fn close_position<'a, 'b, 'c, 'info>(ctx: Context<'a, 'b, 'c, 'info, ClosePosition<'info>>) -> Result<()> {
         instructions::close_position(ctx)
     }
 
@@ -484,7 +447,8 @@ pub mod byreal_clmm {
     /// * `liquidity` - The desired liquidity to be added, if zero, calculate liquidity base amount_0 or amount_1 according base_flag
     /// * `amount_0_max` - The max amount of token_0 to spend, which serves as a slippage check
     /// * `amount_1_max` - The max amount of token_1 to spend, which serves as a slippage check
-    /// * `base_flag` - must be specified if liquidity is zero, true: calculate liquidity base amount_0_max otherwise base amount_1_max
+    /// * `base_flag` - Now, we don't use base_flag, it can be None;
+    ///                 We directly calculate liquidity from amount_0_max or amount_1_max according to the current price in pool.
     ///
     pub fn increase_liquidity_v2<'a, 'b, 'c: 'info, 'info>(
         ctx: Context<'a, 'b, 'c, 'info, IncreaseLiquidityV2<'info>>,
@@ -493,9 +457,6 @@ pub mod byreal_clmm {
         amount_1_max: u64,
         base_flag: Option<bool>,
     ) -> Result<()> {
-        if liquidity == 0 {
-            assert!(base_flag.is_some());
-        }
         instructions::increase_liquidity_v2(ctx, liquidity, amount_0_max, amount_1_max, base_flag)
     }
 
@@ -554,13 +515,7 @@ pub mod byreal_clmm {
         sqrt_price_limit_x64: u128,
         is_base_input: bool,
     ) -> Result<()> {
-        instructions::swap(
-            ctx,
-            amount,
-            other_amount_threshold,
-            sqrt_price_limit_x64,
-            is_base_input,
-        )
+        instructions::swap(ctx, amount, other_amount_threshold, sqrt_price_limit_x64, is_base_input)
     }
 
     /// Swaps one token for as much as possible of another token across a single pool, support token program 2022
@@ -580,13 +535,7 @@ pub mod byreal_clmm {
         sqrt_price_limit_x64: u128,
         is_base_input: bool,
     ) -> Result<()> {
-        instructions::swap_v2(
-            ctx,
-            amount,
-            other_amount_threshold,
-            sqrt_price_limit_x64,
-            is_base_input,
-        )
+        instructions::swap_v2(ctx, amount, other_amount_threshold, sqrt_price_limit_x64, is_base_input)
     }
 
     //== drop this method

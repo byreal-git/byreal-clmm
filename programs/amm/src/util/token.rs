@@ -9,8 +9,7 @@ use anchor_lang::{
 use anchor_spl::memo::spl_memo;
 use anchor_spl::token::{self, Token};
 use anchor_spl::token_2022::{
-    self, get_account_data_size, GetAccountDataSize, InitializeAccount3, InitializeImmutableOwner,
-    Token2022,
+    self, get_account_data_size, GetAccountDataSize, InitializeAccount3, InitializeImmutableOwner, Token2022,
 };
 use anchor_spl::token_interface::{initialize_mint2, InitializeMint2, Mint, TokenInterface};
 use spl_token_2022::{
@@ -180,10 +179,7 @@ pub fn burn<'a, 'b, 'c, 'info>(
 }
 
 /// Calculate the fee for output amount
-pub fn get_transfer_inverse_fee(
-    mint_account: Box<InterfaceAccount<Mint>>,
-    post_fee_amount: u64,
-) -> Result<u64> {
+pub fn get_transfer_inverse_fee(mint_account: Box<InterfaceAccount<Mint>>, post_fee_amount: u64) -> Result<u64> {
     let mint_info = mint_account.to_account_info();
     if *mint_info.owner == Token::id() {
         return Ok(0);
@@ -216,10 +212,7 @@ pub fn get_transfer_inverse_fee(
 }
 
 /// Calculate the fee for input amount
-pub fn get_transfer_fee(
-    mint_account: Box<InterfaceAccount<Mint>>,
-    pre_fee_amount: u64,
-) -> Result<u64> {
+pub fn get_transfer_fee(mint_account: Box<InterfaceAccount<Mint>>, pre_fee_amount: u64) -> Result<u64> {
     let mint_info = mint_account.to_account_info();
     if *mint_info.owner == Token::id() {
         return Ok(0);
@@ -244,20 +237,14 @@ pub fn support_mint_associated_is_initialized(
     if remaining_accounts.len() == 0 {
         return Ok(false);
     }
-    let (expect_mint_associated, __bump) = Pubkey::find_program_address(
-        &[SUPPORT_MINT_SEED.as_bytes(), token_mint.key().as_ref()],
-        &crate::id(),
-    );
+    let (expect_mint_associated, __bump) =
+        Pubkey::find_program_address(&[SUPPORT_MINT_SEED.as_bytes(), token_mint.key().as_ref()], &crate::id());
     let mut mint_associated_is_initialized = false;
     for mint_associated_info in remaining_accounts.into_iter() {
-        if *mint_associated_info.owner != crate::id()
-            || mint_associated_info.key() != expect_mint_associated
-        {
+        if *mint_associated_info.owner != crate::id() || mint_associated_info.key() != expect_mint_associated {
             continue;
         }
-        let mint_associated = SupportMintAssociated::try_deserialize(
-            &mut mint_associated_info.data.borrow().as_ref(),
-        )?;
+        let mint_associated = SupportMintAssociated::try_deserialize(&mut mint_associated_info.data.borrow().as_ref())?;
         if mint_associated.mint == token_mint.key() {
             mint_associated_is_initialized = true;
             break;
@@ -266,10 +253,7 @@ pub fn support_mint_associated_is_initialized(
     return Ok(mint_associated_is_initialized);
 }
 
-pub fn is_supported_mint(
-    mint_account: &InterfaceAccount<Mint>,
-    mint_associated_is_initialized: bool,
-) -> Result<bool> {
+pub fn is_supported_mint(mint_account: &InterfaceAccount<Mint>, mint_associated_is_initialized: bool) -> Result<bool> {
     let mint_info = mint_account.to_account_info();
     if *mint_info.owner == Token::id() {
         return Ok(true);
@@ -307,16 +291,11 @@ pub fn create_position_nft_mint_with_extensions<'info>(
     with_matedata: bool,
 ) -> Result<()> {
     let extensions = if with_matedata {
-        [
-            ExtensionType::MintCloseAuthority,
-            ExtensionType::MetadataPointer,
-        ]
-        .to_vec()
+        [ExtensionType::MintCloseAuthority, ExtensionType::MetadataPointer].to_vec()
     } else {
         [ExtensionType::MintCloseAuthority].to_vec()
     };
-    let space =
-        ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&extensions)?;
+    let space = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&extensions)?;
 
     let lamports = Rent::get()?.minimum_balance(space);
 

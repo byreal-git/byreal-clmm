@@ -74,16 +74,14 @@ impl ProtocolPositionState {
             ErrorCode::TickUpperOverflow
         );
         // calculate accumulated Fees
-        let tokens_owed_0 =
-            U128::from(fee_growth_inside_0_x64.saturating_sub(self.fee_growth_inside_0_last_x64))
-                .mul_div_floor(U128::from(self.liquidity), U128::from(fixed_point_64::Q64))
-                .unwrap()
-                .to_underflow_u64();
-        let tokens_owed_1 =
-            U128::from(fee_growth_inside_1_x64.saturating_sub(self.fee_growth_inside_1_last_x64))
-                .mul_div_floor(U128::from(self.liquidity), U128::from(fixed_point_64::Q64))
-                .unwrap()
-                .to_underflow_u64();
+        let tokens_owed_0 = U128::from(fee_growth_inside_0_x64.saturating_sub(self.fee_growth_inside_0_last_x64))
+            .mul_div_floor(U128::from(self.liquidity), U128::from(fixed_point_64::Q64))
+            .unwrap()
+            .to_underflow_u64();
+        let tokens_owed_1 = U128::from(fee_growth_inside_1_x64.saturating_sub(self.fee_growth_inside_1_last_x64))
+            .mul_div_floor(U128::from(self.liquidity), U128::from(fixed_point_64::Q64))
+            .unwrap()
+            .to_underflow_u64();
 
         // Update the position liquidity
         self.liquidity = liquidity_math::add_delta(self.liquidity, liquidity_delta)?;
@@ -96,10 +94,7 @@ impl ProtocolPositionState {
             self.token_fees_owed_1 = self.token_fees_owed_1.checked_add(tokens_owed_1).unwrap();
         }
         #[cfg(feature = "enable-log")]
-        msg!(
-            "protocol position reward_growths_inside:{:?}",
-            reward_growths_inside
-        );
+        msg!("protocol position reward_growths_inside:{:?}", reward_growths_inside);
         self.update_reward_growths_inside(reward_growths_inside);
         self.recent_epoch = get_recent_epoch()?;
         Ok(())
