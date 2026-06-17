@@ -6878,9 +6878,9 @@
             "type": "u16"
           },
           {
-            "name": "trade_slippage_fee_base",
+            "name": "trade_slippage_fee_base_milli_bp",
             "docs": [
-              "trade_slippage_fee: 公式中的b值，单位取 1/1000"
+              "trade_slippage_fee: 公式中的b值，精度为 0.001 bps"
             ],
             "type": "u8"
           },
@@ -6892,9 +6892,9 @@
             "type": "u8"
           },
           {
-            "name": "imbalance_fee_base",
+            "name": "imbalance_fee_base_tenths_of_bp",
             "docs": [
-              "公式中的b,单位取1/10"
+              "imbalance_fee: 公式中的b值，精度为 0.1 bps"
             ],
             "type": "u8"
           },
@@ -6917,7 +6917,7 @@
           {
             "name": "token0_pyth_feed_id",
             "docs": [
-              "Pyth feed id for base token."
+              "Pyth feed id for token0."
             ],
             "type": {
               "array": [
@@ -6929,7 +6929,7 @@
           {
             "name": "token1_pyth_feed_id",
             "docs": [
-              "Pyth feed id for quote token."
+              "Pyth feed id for token1."
             ],
             "type": {
               "array": [
@@ -7187,9 +7187,9 @@
             }
           },
           {
-            "name": "trade_slippage_fee_base",
+            "name": "trade_slippage_fee_base_milli_bp",
             "docs": [
-              "trade_slippage_fee 基数，单位 1/1000"
+              "trade_slippage_fee 基数，精度为 0.001 bps"
             ],
             "type": {
               "option": "u8"
@@ -7205,9 +7205,9 @@
             }
           },
           {
-            "name": "imbalance_fee_base",
+            "name": "imbalance_fee_base_tenths_of_bp",
             "docs": [
-              "imbalance_fee 基数，单位 1/10"
+              "imbalance_fee 基数，精度为 0.1 bps"
             ],
             "type": {
               "option": "u8"

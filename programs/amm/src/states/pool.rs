@@ -169,12 +169,12 @@ pub struct PoolState {
     /// arbitrage_fee: a manually configured tolerance; if the price gap is below this value no
     /// arbitrageFee is charged. Unit is 10^-6 (percent-per-million).
     pub arbitrage_fee_buffer_ppm: u16,
-    /// trade_slippage_fee: the `b` coefficient in the formula. Unit is 1/1000.
-    pub trade_slippage_fee_base: u8,
+    /// trade_slippage_fee: the `b` coefficient in the formula. Precision 0.001 bps.
+    pub trade_slippage_fee_base_milli_bp: u8,
     /// Normalized swap-size value (computed in quote-token units). Unit is 100.
     pub trade_slippage_fee_trade_size_threshold: u8,
-    /// The `b` coefficient in the imbalance-fee formula. Unit is 1/10.
-    pub imbalance_fee_base: u8,
+    /// imbalance_fee: the `b` coefficient in the formula. Precision 0.1 bps.
+    pub imbalance_fee_base_tenths_of_bp: u8,
     /// The `x` coefficient in the imbalance-fee formula. Unit is 1/100.
     pub imbalance_fee_x: u8,
     //----------------------------------------------
@@ -183,9 +183,9 @@ pub struct PoolState {
     pub padding1_1: [u8; 6],
 
     //-------------------- swap-dynamic-fee parameters
-    /// Pyth feed id for base token.
+    /// Pyth feed id for token0.
     pub token0_pyth_feed_id: [u8; 32],
-    /// Pyth feed id for quote token.
+    /// Pyth feed id for token1.
     pub token1_pyth_feed_id: [u8; 32],
     //----------------------------------------------
     pub padding1: [u64; 14],
@@ -293,9 +293,9 @@ impl PoolState {
         self.decay_fee_decrease_rate = 0;
         self.decay_fee_decrease_interval = 0;
         self.arbitrage_fee_buffer_ppm = 0;
-        self.trade_slippage_fee_base = 0;
+        self.trade_slippage_fee_base_milli_bp = 0;
         self.trade_slippage_fee_trade_size_threshold = 0;
-        self.imbalance_fee_base = 0;
+        self.imbalance_fee_base_tenths_of_bp = 0;
         self.imbalance_fee_x = 0;
         self.padding1_1 = [0; 6];
         self.token0_pyth_feed_id = [0; 32];
@@ -435,8 +435,25 @@ impl PoolState {
     // 1 hour. We are not very sensitive to Pyth price updates, but we still reject anything too stale.
     const MAX_PYTH_AGE_SECONDS: u64 = 3600;
 
+    /// Upper-bound multiplier for trade_size under exact-output: cap it to output_notional * N,
+    /// preventing a loose amount_in_max from inflating trade_slippage_fee enough to push
+    /// total_fee_rate >= DENOM and revert.
+    const EXACT_OUTPUT_TRADE_SIZE_CAP_MULTIPLIER: u128 = 3;
+
     /// Calculate dynamic fee rate based on pool/amm config and swap context.
     /// Returns detailed fee breakdown, including total_fee_rate.
+    ///
+    /// `other_amount_threshold`:
+    ///   - is_base_input = true  → amount_out_min (unused here)
+    ///   - is_base_input = false → amount_in_max; combined via min with output_notional to estimate trade_size
+    ///
+    /// For exact-output, trade_size = min(input_max_quote, output_quote * CAP_MULTIPLIER), which avoids
+    /// under-estimating price impact from the output side while preventing an extreme amount_in_max from
+    /// overflowing the fee rate.
+    ///
+    /// NOTE: `amount` is the user's originally specified amount, before deducting any Token-2022 transfer
+    /// fee. For mints with a transfer fee, trade_size is slightly higher than the amount that actually
+    /// enters the swap, so trade_slippage_fee is slightly over-charged. Accepted for now.
     pub fn calculate_dynamic_fee_rate<'a>(
         &self,
         input_vault_key: Pubkey,
@@ -445,6 +462,7 @@ impl PoolState {
         output_vault_amount: u64,
         amount: u64,
         is_base_input: bool,
+        other_amount_threshold: u64,
         fee_base: u32,
         token0_pyth_oracle: &'a AccountInfo<'a>,
         token1_pyth_oracle: &'a AccountInfo<'a>,
@@ -476,12 +494,27 @@ impl PoolState {
                 quote_amount_from_base(amount as u128, p_0, token1_as_quote)?
             }
         } else {
-            let output_is_quote = !input_is_quote;
-            if output_is_quote {
-                amount as u128
-            } else {
+            // exact-output: anchor trade_size on the output notional, letting amount_in_max
+            // participate but capping it to output_notional * N, so a loose amount_in_max
+            // cannot inflate trade_slippage_fee to an unreasonable level.
+            let output_quote = if input_is_quote {
+                // input=quote, output=base → convert output to quote
                 quote_amount_from_base(amount as u128, p_0, token1_as_quote)?
-            }
+            } else {
+                // input=base, output=quote → amount is already quote
+                amount as u128
+            };
+            let input_max_quote = if input_is_quote {
+                other_amount_threshold as u128
+            } else {
+                quote_amount_from_base(other_amount_threshold as u128, p_0, token1_as_quote)?
+            };
+            let cap = output_quote
+                .checked_mul(Self::EXACT_OUTPUT_TRADE_SIZE_CAP_MULTIPLIER)
+                // Overflow cannot happen at realistic token precision; if it ever does, skip the
+                // cap and let the DENOM require! act as a backstop.
+                .unwrap_or(u128::MAX);
+            std::cmp::min(input_max_quote, cap)
         };
 
         let quote_decimals = if token1_as_quote {
@@ -516,9 +549,9 @@ impl PoolState {
             is_buying_base,
             fee_base,
             arbitrage_fee_buffer_ppm: self.arbitrage_fee_buffer_ppm,
-            trade_slippage_fee_base: self.trade_slippage_fee_base,
+            trade_slippage_fee_base_milli_bp: self.trade_slippage_fee_base_milli_bp,
             trade_slippage_fee_trade_size_threshold: self.trade_slippage_fee_trade_size_threshold,
-            imbalance_fee_base: self.imbalance_fee_base,
+            imbalance_fee_base_tenths_of_bp: self.imbalance_fee_base_tenths_of_bp,
             imbalance_fee_x: self.imbalance_fee_x,
         })
     }
@@ -555,9 +588,9 @@ impl PoolState {
     pub fn set_swap_dynamic_fee_params(
         &mut self,
         arbitrage_fee_buffer_ppm: Option<u16>,
-        trade_slippage_fee_base: Option<u8>,
+        trade_slippage_fee_base_milli_bp: Option<u8>,
         trade_slippage_fee_trade_size_threshold: Option<u8>,
-        imbalance_fee_base: Option<u8>,
+        imbalance_fee_base_tenths_of_bp: Option<u8>,
         imbalance_fee_x: Option<u8>,
         token0_pyth_feed_id: Option<[u8; 32]>,
         token1_pyth_feed_id: Option<[u8; 32]>,
@@ -569,14 +602,14 @@ impl PoolState {
             );
             self.arbitrage_fee_buffer_ppm = value;
         }
-        if let Some(value) = trade_slippage_fee_base {
-            self.trade_slippage_fee_base = value;
+        if let Some(value) = trade_slippage_fee_base_milli_bp {
+            self.trade_slippage_fee_base_milli_bp = value;
         }
         if let Some(value) = trade_slippage_fee_trade_size_threshold {
             self.trade_slippage_fee_trade_size_threshold = value;
         }
-        if let Some(value) = imbalance_fee_base {
-            self.imbalance_fee_base = value;
+        if let Some(value) = imbalance_fee_base_tenths_of_bp {
+            self.imbalance_fee_base_tenths_of_bp = value;
         }
         if let Some(value) = imbalance_fee_x {
             require!(value <= 100, ErrorCode::InvalidSwapDynamicFeeParams);
@@ -2186,14 +2219,14 @@ pub mod pool_test {
             assert_eq!(unpack_decay_fee_decrease_interval, decay_fee_decrease_interval);
             let unpack_arbitrage_fee_buffer_ppm = unpack_data.arbitrage_fee_buffer_ppm;
             assert_eq!(unpack_arbitrage_fee_buffer_ppm, arbitrage_fee_buffer_ppm);
-            let unpack_trade_slippage_fee_base = unpack_data.trade_slippage_fee_base;
+            let unpack_trade_slippage_fee_base = unpack_data.trade_slippage_fee_base_milli_bp;
             assert_eq!(unpack_trade_slippage_fee_base, trade_slippage_fee_base);
             let unpack_trade_slippage_fee_trade_size_threshold = unpack_data.trade_slippage_fee_trade_size_threshold;
             assert_eq!(
                 unpack_trade_slippage_fee_trade_size_threshold,
                 trade_slippage_fee_trade_size_threshold
             );
-            let unpack_imbalance_fee_base = unpack_data.imbalance_fee_base;
+            let unpack_imbalance_fee_base = unpack_data.imbalance_fee_base_tenths_of_bp;
             assert_eq!(unpack_imbalance_fee_base, imbalance_fee_base);
             let unpack_imbalance_fee_x = unpack_data.imbalance_fee_x;
             assert_eq!(unpack_imbalance_fee_x, imbalance_fee_x);

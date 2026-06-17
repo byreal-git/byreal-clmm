@@ -37,6 +37,7 @@ pub fn swap_v3_dyn<'a, 'b, 'c: 'info, 'info>(
         ctx.accounts.output_vault.amount,
         amount,
         is_base_input,
+        other_amount_threshold,
         fee_base,
         token0_pyth_oracle,
         token1_pyth_oracle,

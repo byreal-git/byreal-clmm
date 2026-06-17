@@ -3,6 +3,7 @@ use crate::libraries::big_num::{U128, U256};
 use crate::libraries::fixed_point_64;
 use crate::libraries::full_math::MulDiv;
 use crate::states::config::FEE_RATE_DENOMINATOR_VALUE;
+use crate::states::BPS_DENOMINATOR_VALUE;
 use anchor_lang::prelude::*;
 
 /// Compute arbitrage_fee.
@@ -33,9 +34,9 @@ pub fn calculate_arbitrage_fee(p_0: u128, p_index: u128, buffer_ppm: u16, fee_ba
 
 /// Compute trade_slippage_fee.
 /// `trade_size`: trade size (normalized quote amount).
-/// `base`: base coefficient (in units of 1/1000); base=5 means 5/1000 = 0.005.
+/// `base`: base coefficient, precision 0.001 bps; base=5 means 0.005 bps.
 /// `threshold`: threshold (in units of 100 * 10^decimals quote amounts); threshold=1 means 100 tokens.
-/// Returns: trade_slippage_fee (a fee rate).
+/// Returns: trade_slippage_fee (a fee rate, in ppm).
 pub fn calculate_trade_slippage_fee(trade_size: u64, base: u8, threshold: u8) -> Result<u32> {
     let threshold = (threshold as u64)
         .checked_mul(100)
@@ -58,6 +59,11 @@ pub fn calculate_trade_slippage_fee(trade_size: u64, base: u8, threshold: u8) ->
         .ok_or(ErrorCode::CalculateOverflow)?
         .as_u128();
 
+    let fee = fee
+        .checked_add(BPS_DENOMINATOR_VALUE as u128 - 1)
+        .and_then(|v| v.checked_div(BPS_DENOMINATOR_VALUE as u128))
+        .ok_or(ErrorCode::CalculateOverflow)?;
+
     require!(fee <= u32::MAX as u128, ErrorCode::CalculateOverflow);
 
     Ok(fee as u32)
@@ -66,10 +72,10 @@ pub fn calculate_trade_slippage_fee(trade_size: u64, base: u8, threshold: u8) ->
 /// Compute imbalance_fee.
 /// `quote_value_of_base`: quote-denominated value of base tokens at the current price.
 /// `quote_balance`: amount of quote tokens held by the pool.
-/// `base`: base coefficient (in units of 1/10); base=5 means 5/10 = 0.5.
+/// `base`: base coefficient, precision 0.1 bps; base=5 means 0.5 bps.
 /// `x`: threshold (in units of 1/100); x=10 means 10/100 = 0.1.
 /// `is_buying_base`: whether the swap removes base from the pool (i.e., the user is buying base).
-/// Returns: imbalance_fee (a fee rate).
+/// Returns: imbalance_fee (a fee rate, in ppm).
 pub fn calculate_imbalance_fee(
     quote_value_of_base: u128,
     quote_balance: u128,
@@ -123,6 +129,11 @@ pub fn calculate_imbalance_fee(
         .ok_or(ErrorCode::CalculateOverflow)?
         .as_u128();
 
+    let fee = fee
+        .checked_add(BPS_DENOMINATOR_VALUE as u128 - 1)
+        .and_then(|v| v.checked_div(BPS_DENOMINATOR_VALUE as u128))
+        .ok_or(ErrorCode::CalculateOverflow)?;
+
     require!(fee <= u32::MAX as u128, ErrorCode::CalculateOverflow);
 
     Ok(fee as u32)
@@ -149,9 +160,9 @@ pub struct DynamicFeeInputs {
     pub is_buying_base: bool,
     pub fee_base: u32,
     pub arbitrage_fee_buffer_ppm: u16,
-    pub trade_slippage_fee_base: u8,
+    pub trade_slippage_fee_base_milli_bp: u8,
     pub trade_slippage_fee_trade_size_threshold: u8,
-    pub imbalance_fee_base: u8,
+    pub imbalance_fee_base_tenths_of_bp: u8,
     pub imbalance_fee_x: u8,
 }
 
@@ -164,6 +175,12 @@ pub struct DynamicFeeResult {
     pub total_fee_rate: u32,
 }
 
+/// Safety guarantees:
+/// - total_fee_rate = fee_base + swap_dynamic_fee, where swap_dynamic_fee >= 0, so a
+///   successfully completed swap always charges a rate >= fee_base; an abnormal Pyth price
+///   can never lower the base fee.
+/// - If the Pyth price pushes total_fee_rate >= FEE_RATE_DENOMINATOR_VALUE, the swap is
+///   rejected (require! fails) rather than executing at a rate below the base fee.
 pub fn calculate_dynamic_fee_rate(inputs: &DynamicFeeInputs) -> Result<DynamicFeeResult> {
     let arbitrage_fee = calculate_arbitrage_fee(
         inputs.p_0,
@@ -173,13 +190,13 @@ pub fn calculate_dynamic_fee_rate(inputs: &DynamicFeeInputs) -> Result<DynamicFe
     )?;
     let trade_slippage_fee = calculate_trade_slippage_fee(
         inputs.trade_size,
-        inputs.trade_slippage_fee_base,
+        inputs.trade_slippage_fee_base_milli_bp,
         inputs.trade_slippage_fee_trade_size_threshold,
     )?;
     let imbalance_fee = calculate_imbalance_fee(
         inputs.quote_value_of_base,
         inputs.quote_balance,
-        inputs.imbalance_fee_base,
+        inputs.imbalance_fee_base_tenths_of_bp,
         inputs.imbalance_fee_x,
         inputs.is_buying_base,
     )?;
@@ -188,7 +205,7 @@ pub fn calculate_dynamic_fee_rate(inputs: &DynamicFeeInputs) -> Result<DynamicFe
         .checked_add(inputs.fee_base as u64)
         .ok_or(ErrorCode::CalculateOverflow)?;
     require!(
-        total_fee_rate <= FEE_RATE_DENOMINATOR_VALUE as u64,
+        total_fee_rate < FEE_RATE_DENOMINATOR_VALUE as u64,
         ErrorCode::InvalidSwapDynamicFeeParams
     );
 
@@ -317,8 +334,10 @@ mod tests {
         let fee = calculate_trade_slippage_fee(100, 10, 1).unwrap();
         assert_eq!(fee, 0);
 
+        // delta = (200-100)*10^12 = 10^14, sqrt = 10^7
+        // fee = ceil(10 * 10^7 / 1000) = 100_000, then ceil(100_000 / 10_000) = 10
         let fee = calculate_trade_slippage_fee(200, 10, 1).unwrap();
-        assert_eq!(fee, 100_000);
+        assert_eq!(fee, 10);
     }
 
     #[test]
@@ -332,24 +351,26 @@ mod tests {
     fn test_calculate_trade_slippage_fee_threshold_zero() {
         // threshold = 0 → any trade_size > 0 triggers fee
         // delta = 100 * 10^12, sqrt = 10^7
-        // fee = ceil(10 * 10_000_000 / 1000) = 100_000
+        // fee = ceil(10 * 10^7 / 1000) = 100_000, then ceil(100_000 / 10_000) = 10
         let fee = calculate_trade_slippage_fee(100, 10, 0).unwrap();
-        assert_eq!(fee, 100_000);
+        assert_eq!(fee, 10);
     }
 
     #[test]
     fn test_calculate_trade_slippage_fee_just_above_threshold() {
         // trade_size = 101, threshold = 1 (→100)
         // delta = 1 * 10^12, sqrt = 1_000_000
-        // fee = ceil(10 * 1_000_000 / 1000) = 10_000
+        // fee = ceil(10 * 1_000_000 / 1000) = 10_000, then ceil(10_000 / 10_000) = 1
         let fee = calculate_trade_slippage_fee(101, 10, 1).unwrap();
-        assert_eq!(fee, 10_000);
+        assert_eq!(fee, 1);
     }
 
     #[test]
     fn test_calculate_imbalance_fee() {
+        // total=200, diff=100, imbalance_ppm=500_000, x_ppm=100_000
+        // over=400_000, fee=ceil(400_000*5/10)=200_000, then ceil(200_000/10_000)=20
         let fee = calculate_imbalance_fee(150, 50, 5, 10, false).unwrap();
-        assert_eq!(fee, 200_000);
+        assert_eq!(fee, 20);
 
         let fee = calculate_imbalance_fee(150, 50, 5, 10, true).unwrap();
         assert_eq!(fee, 0);
@@ -363,7 +384,7 @@ mod tests {
         // quote_balance > quote_value_of_base (opposite direction)
         // Same absolute imbalance → same fee
         let fee = calculate_imbalance_fee(50, 150, 5, 10, true).unwrap();
-        assert_eq!(fee, 200_000);
+        assert_eq!(fee, 20);
     }
 
     #[test]
@@ -394,20 +415,20 @@ mod tests {
             is_buying_base: false,
             fee_base: 1_000,
             arbitrage_fee_buffer_ppm: 0,
-            trade_slippage_fee_base: 10,
+            trade_slippage_fee_base_milli_bp: 10,
             trade_slippage_fee_trade_size_threshold: 1,
-            imbalance_fee_base: 5,
+            imbalance_fee_base_tenths_of_bp: 5,
             imbalance_fee_x: 100,
         };
 
         let result = calculate_dynamic_fee_rate(&inputs).unwrap();
         assert_eq!(result.arbitrage_fee, 9_000);
-        assert_eq!(result.trade_slippage_fee, 100_000);
+        assert_eq!(result.trade_slippage_fee, 10);
         assert_eq!(result.imbalance_fee, 0);
-        assert_eq!(result.swap_dynamic_fee, 109_000);
-        assert_eq!(result.total_fee_rate, 110_000);
+        assert_eq!(result.swap_dynamic_fee, 9_010);
+        assert_eq!(result.total_fee_rate, 10_010);
 
-        assert!(result.total_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
+        assert!(result.total_fee_rate < FEE_RATE_DENOMINATOR_VALUE);
     }
 
     #[test]
@@ -423,9 +444,9 @@ mod tests {
             is_buying_base: false,
             fee_base: 1_000,
             arbitrage_fee_buffer_ppm: 0,
-            trade_slippage_fee_base: 10,
+            trade_slippage_fee_base_milli_bp: 10,
             trade_slippage_fee_trade_size_threshold: 1,
-            imbalance_fee_base: 5,
+            imbalance_fee_base_tenths_of_bp: 5,
             imbalance_fee_x: 10,
         };
 
@@ -451,9 +472,9 @@ mod tests {
             is_buying_base: false,
             fee_base: 500_000,
             arbitrage_fee_buffer_ppm: 0,
-            trade_slippage_fee_base: 0,
+            trade_slippage_fee_base_milli_bp: 0,
             trade_slippage_fee_trade_size_threshold: 1,
-            imbalance_fee_base: 0,
+            imbalance_fee_base_tenths_of_bp: 0,
             imbalance_fee_x: 10,
         };
 
@@ -475,23 +496,23 @@ mod tests {
             is_buying_base: false,
             fee_base: 1_000,
             arbitrage_fee_buffer_ppm: 5_000,
-            trade_slippage_fee_base: 5,
+            trade_slippage_fee_base_milli_bp: 5,
             trade_slippage_fee_trade_size_threshold: 1,
-            imbalance_fee_base: 3,
+            imbalance_fee_base_tenths_of_bp: 3,
             imbalance_fee_x: 5,
         };
 
         let result = calculate_dynamic_fee_rate(&inputs).unwrap();
         // arbitrage: diff_ppm≈50000, fee = 50000 - 5000 - 1000 = 44000
         assert_eq!(result.arbitrage_fee, 44_000);
-        // trade_slippage: delta=400*10^12, sqrt=20*10^6, fee=ceil(5*20M/1000)=100_000
-        assert_eq!(result.trade_slippage_fee, 100_000);
+        // trade_slippage: delta=400*10^12, sqrt=20*10^6, fee=ceil(5*20M/1000)=100_000, ceil(100_000/10_000)=10
+        assert_eq!(result.trade_slippage_fee, 10);
         // imbalance: total=1000, diff=400, ppm=400_000, x_ppm=50_000,
-        //   over=350_000, fee=ceil(350_000*3/10)=105_000
-        assert_eq!(result.imbalance_fee, 105_000);
+        //   over=350_000, fee=ceil(350_000*3/10)=105_000, ceil(105_000/10_000)=11
+        assert_eq!(result.imbalance_fee, 11);
 
-        assert_eq!(result.swap_dynamic_fee, 249_000);
-        assert_eq!(result.total_fee_rate, 250_000);
-        assert!(result.total_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
+        assert_eq!(result.swap_dynamic_fee, 44_021);
+        assert_eq!(result.total_fee_rate, 45_021);
+        assert!(result.total_fee_rate < FEE_RATE_DENOMINATOR_VALUE);
     }
 }

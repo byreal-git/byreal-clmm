@@ -8,12 +8,12 @@ pub struct SetSwapDynamicFeeParamsInput {
     pub enabled: bool,
     /// arbitrage_fee buffer value, in ppm (10^-6)
     pub arbitrage_fee_buffer_ppm: Option<u16>,
-    /// trade_slippage_fee base, in units of 1/1000
-    pub trade_slippage_fee_base: Option<u8>,
+    /// trade_slippage_fee base, precision 0.001 bps
+    pub trade_slippage_fee_base_milli_bp: Option<u8>,
     /// trade_slippage_fee threshold, in units of 100
     pub trade_slippage_fee_trade_size_threshold: Option<u8>,
-    /// imbalance_fee base, in units of 1/10
-    pub imbalance_fee_base: Option<u8>,
+    /// imbalance_fee base, precision 0.1 bps
+    pub imbalance_fee_base_tenths_of_bp: Option<u8>,
     /// imbalance_fee threshold, in units of 1/100
     pub imbalance_fee_x: Option<u8>,
     /// Pyth feed id for token0
@@ -48,9 +48,9 @@ pub fn set_swap_dynamic_fee_params(
 
     pool_state.set_swap_dynamic_fee_params(
         params.arbitrage_fee_buffer_ppm,
-        params.trade_slippage_fee_base,
+        params.trade_slippage_fee_base_milli_bp,
         params.trade_slippage_fee_trade_size_threshold,
-        params.imbalance_fee_base,
+        params.imbalance_fee_base_tenths_of_bp,
         params.imbalance_fee_x,
         params.token0_pyth_feed_id,
         params.token1_pyth_feed_id,
