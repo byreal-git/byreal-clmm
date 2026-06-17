@@ -1,0 +1,33 @@
+programs/amm/src/libraries/dynamic_fee_math.rs
+  3e43502d4ed11b30 6,37,39,62-66,75,78,132-136,163,165,178-183,193,199,208,337-338,340,354,356,363,365,370-371,373,387,418,420,426,428-429,431,447,449,475,477,499,501,508-509,511-512,514-516
+idl/byreal_clmm.json
+  3e43502d4ed11b30 6881,6883,6895,6897,6920,6932,7190,7192,7208,7210
+programs/amm/src/states/config.rs
+  3e43502d4ed11b30 7
+programs/amm/src/instructions/admin/set_swap_dynamic_fee_params.rs
+  3e43502d4ed11b30 11-12,15-16,51,53
+programs/amm/src/states/pool.rs
+  3e43502d4ed11b30 172-173,176-177,186,188,296,298,438-442,445-456,465,497-504,506-508,510-517,552,554,591,593,605-606,611-612,2222,2229
+programs/amm/src/instructions/swap_v3_dyn.rs
+  3e43502d4ed11b30 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "650afbdf9d1b3bd6f6996eafd49254fde5f3e1c8",
+  "prompts": {
+    "3e43502d4ed11b30": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f47b4bbd-3cbe-4963-bbe8-e33057177068",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 129,
+      "total_deletions": 73,
+      "accepted_lines": 129,
+      "overriden_lines": 0
+    }
+  }
+}
